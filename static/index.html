@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0D1117" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <title>VoxDesk</title>
+  <style>
+    :root {
+      --accent: #74D969;
+      --accent-soft: rgba(116, 217, 105, 0.22);
+      --accent-dim: rgba(116, 217, 105, 0.12);
+      --bg: #0D1117;
+      --panel: rgba(22, 28, 38, 0.72);
+      --surface: rgba(255, 255, 255, 0.06);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #F2F6FA;
+      --muted: #8E9CAD;
+      --rec: #FF5C5C;
+      --think: #F5B841;
+    }
+
+    body.night {
+      --bg: #05070A;
+      --panel: rgba(10, 13, 18, 0.85);
+      --surface: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.06);
+      --text: #AAB6C4;
+      --muted: #5C6876;
+    }
+
+    body.night .portrait-img {
+      filter: brightness(0.7) drop-shadow(0 14px 28px rgba(0, 0, 0, 0.75));
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+      user-select: none;
+    }
+
+    /* PC ブラウザでの Echo Show 5 (960x480 / 2:1) 実機比率プレビュー枠 */
+    body.preview-frame {
+      background: #050709;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    body.preview-frame .device-shell {
+      position: relative;
+      width: 788px;
+      height: 394px;
+      max-width: 96vw;
+      aspect-ratio: 2 / 1;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 6px solid #202731;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      transform: translateZ(0);
+    }
+
+    body:not(.preview-frame) .device-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .preview-caption {
+      display: none;
+      font-size: 12px;
+      color: #7D8B9B;
+      letter-spacing: 0.04em;
+    }
+
+    body.preview-frame .preview-caption {
+      display: block;
+    }
+
+    /* スタジオ背景 */
+    .stage-bg {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 80% 48%, var(--accent-soft) 0%, transparent 52%),
+        radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.035) 0%, transparent 45%),
+        var(--bg);
+      transition: background 0.35s ease;
+      z-index: 0;
+    }
+
+    /* メイン 62:38 左右分割レイアウト */
+    .layout {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 62% 38%;
+    }
+
+    /* ========== 左ペイン（62%）：時計 ＋ 広々会話エリア ========== */
+    .left-pane {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 14px 10px 16px 20px;
+      min-width: 0;
+      min-height: 0;
+      cursor: pointer;
+    }
+
+    /* 上段：大きな時計 ＋ ユーティリティボタン */
+    .left-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      cursor: default;
+    }
+
+    .clock-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .clock-time {
+      font-size: 34px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .clock-date {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .header-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-btn {
+      height: 32px;
+      padding: 0 11px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .tool-btn.icon-only {
+      width: 32px;
+      padding: 0;
+      font-size: 15px;
+    }
+
+    .tool-btn:active { transform: scale(0.94); }
+
+    /* 中〜下段全体：広々とした会話・字幕エリア */
+    .dialogue-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 10px;
+      padding: 16px 4px 4px;
+      overflow: hidden;
+    }
+
+    .speaker-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .speaker-id {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .speaker-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .speaker-style {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .meta-badge {
+      font-size: 11px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .user-utterance {
+      display: none;
+      align-self: flex-start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px 12px;
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.4;
+      max-width: 100%;
+      flex-shrink: 0;
+    }
+
+    .user-utterance.visible {
+      display: block;
+    }
+
+    .reply-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .reply-scroll::-webkit-scrollbar { width: 3px; }
+    .reply-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+
+    .reply-text {
+      font-size: 21px;
+      font-weight: 600;
+      line-height: 1.54;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    /* 右下フローティング・コンパクトマイクピル（画面を圧迫しない） */
+    .talk-btn {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      z-index: 12;
+      height: 40px;
+      border-radius: 999px;
+      border: 1.5px solid var(--accent);
+      background: rgba(13, 17, 23, 0.82);
+      backdrop-filter: blur(12px);
+      color: var(--text);
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      transition: background 0.18s, border-color 0.18s, transform 0.1s;
+    }
+
+    .talk-btn:active { transform: scale(0.985); }
+
+    body.mode-recording .talk-btn {
+      border-color: var(--rec);
+      background: rgba(255, 92, 92, 0.22);
+    }
+
+    body.mode-thinking .talk-btn {
+      border-color: var(--think);
+      background: rgba(245, 184, 65, 0.16);
+    }
+
+    body.mode-speaking .talk-btn {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .talk-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    body.mode-recording .status-dot { background: var(--rec); }
+    body.mode-thinking .status-dot { background: var(--think); }
+
+    /* 音量波形 */
+    .wave {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 20px;
+    }
+
+    .wave-bar {
+      width: 3.5px;
+      height: 5px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.35);
+      transition: height 0.08s linear, background 0.2s;
+    }
+
+    body.mode-recording .wave-bar { background: var(--rec); }
+    body.mode-speaking .wave-bar { background: var(--accent); }
+
+    body.mode-thinking .wave-bar {
+      background: var(--think);
+      animation: speakWave 0.72s infinite alternate ease-in-out;
+    }
+    body.mode-thinking .wave-bar:nth-child(2) { animation-delay: 0.14s; }
+    body.mode-thinking .wave-bar:nth-child(3) { animation-delay: 0.28s; }
+    body.mode-thinking .wave-bar:nth-child(4) { animation-delay: 0.42s; }
+    body.mode-thinking .wave-bar:nth-child(5) { animation-delay: 0.56s; }
+
+    @keyframes speakWave {
+      0% { height: 4px; }
+      100% { height: 18px; }
+    }
+
+    .end-btn {
+      height: 100%;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 92, 92, 0.45);
+      background: rgba(255, 92, 92, 0.14);
+      color: #FF8A8A;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      display: none;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    body.in-call .end-btn { display: inline-flex; align-items: center; justify-content: center; }
+    .end-btn:active { transform: scale(0.95); }
+
+    body.mode-listening .talk-btn {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* ========== 右ペイン（40%）：フルハイト立ち絵ステージ ========== */
+    .right-pane {
+      position: relative;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .portrait-img {
+      position: relative;
+      height: 108%;
+      max-width: 96%;
+      bottom: -10%;
+      object-fit: contain;
+      object-position: bottom center;
+      filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.55));
+      transition: opacity 0.2s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), filter 0.25s ease;
+      transform-origin: bottom center;
+      pointer-events: none;
+      animation: gentleBreath 3.8s infinite ease-in-out;
+    }
+
+    @keyframes gentleBreath {
+      0%, 100% { transform: scale(1, 1) translateY(0); }
+      50% { transform: scale(0.996, 1.007) translateY(-1px); }
+    }
+
+    body.mode-thinking .portrait-img {
+      animation: none;
+      transform: rotate(-1.5deg);
+    }
+
+    .portrait-img.anim-hop {
+      animation: happyHop 0.56s cubic-bezier(0.22, 1, 0.36, 1) !important;
+    }
+
+    @keyframes happyHop {
+      0% { transform: translateY(0) scale(1, 1); }
+      18% { transform: translateY(2px) scale(1.012, 0.988); }
+      50% { transform: translateY(-5px) scale(0.992, 1.014); }
+      78% { transform: translateY(1.5px) scale(1.008, 0.993); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+
+    .portrait-img.anim-nod {
+      animation: listenNod 0.36s ease-in-out !important;
+    }
+
+    @keyframes listenNod {
+      0% { transform: translateY(0) scale(1, 1); }
+      45% { transform: translateY(3px) scale(1.006, 0.994); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+
+    body.mode-recording .portrait-img {
+      filter: drop-shadow(0 0 18px rgba(255, 92, 92, 0.42)) drop-shadow(0 12px 26px rgba(0, 0, 0, 0.55));
+    }
+
+    /* オーバーレイシート（設定＆履歴） */
+    .backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.62);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 30;
+    }
+    .backdrop.open { opacity: 1; pointer-events: auto; }
+
+    .sheet {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      bottom: 10px;
+      width: 390px;
+      max-width: calc(100% - 20px);
+      background: #141B24;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      transform: translateX(110%);
+      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+    .sheet.open { transform: translateX(0); }
+
+    .sheet-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 16px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .char-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1.5px solid transparent;
+      border-radius: 12px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .char-card.selected {
+      border-color: var(--accent);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .char-card img {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #1B232E;
+      flex-shrink: 0;
+    }
+
+    .char-card-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+    .char-card-style { font-size: 10px; color: var(--muted); }
+
+    .setting-block { display: flex; flex-direction: column; gap: 6px; }
+    .setting-label { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; }
+
+    select.setting-select {
+      width: 100%;
+      background: #1D2734;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    input[type="range"] { width: 100%; accent-color: var(--accent); height: 22px; }
+
+    .row-btn {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1D2734;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .hist-item {
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .hist-item.user { background: #1D2734; align-self: flex-end; max-width: 90%; }
+    .hist-item.ai { background: rgba(255, 255, 255, 0.06); border-left: 3px solid var(--accent); align-self: flex-start; max-width: 95%; }
+  </style>
+</head>
+<body>
+  <div class="device-shell">
+    <div class="stage-bg"></div>
+
+    <div class="layout">
+      <!-- 左 62%：時計 ＋ 広々会話エリア -->
+      <div id="leftPane" class="left-pane">
+        <header id="leftHeader" class="left-header">
+          <div class="clock-wrap">
+            <span id="clockTime" class="clock-time">--:--</span>
+            <span id="clockDate" class="clock-date"></span>
+          </div>
+          <div class="header-tools">
+            <button id="replayBtn" class="tool-btn" style="display:none;">もう一回</button>
+            <button id="historyBtn" class="tool-btn">履歴</button>
+            <button id="settingsBtn" class="tool-btn icon-only" aria-label="設定">⚙</button>
+          </div>
+        </header>
+
+        <section class="dialogue-area">
+          <div class="speaker-row">
+            <div class="speaker-id">
+              <span id="speakerName" class="speaker-name">ずんだもん</span>
+              <span id="speakerStyle" class="speaker-style">ノーマル</span>
+            </div>
+            <span id="metaText" class="meta-badge">準備完了</span>
+          </div>
+
+          <div id="userUtterance" class="user-utterance"></div>
+
+          <div class="reply-scroll">
+            <div id="replyText" class="reply-text">画面をタップして話しかけてほしいのだ！</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 右 38%：フルハイト立ち絵 -->
+      <section id="rightPane" class="right-pane" aria-label="キャラクター">
+        <img id="portraitImg" class="portrait-img" src="/api/character/3/portrait?expr=idle&v=ahiru4" alt="キャラクター立ち絵" />
+      </section>
+
+      <!-- 右下フローティングマイクピル -->
+      <button id="talkBtn" class="talk-btn">
+        <span class="talk-left">
+          <span id="dot" class="status-dot"></span>
+          <span id="talkLabel">話す</span>
+        </span>
+        <div class="wave">
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+      </button>
+    </div>
+
+    <!-- 設定シート -->
+    <div id="backdrop" class="backdrop"></div>
+    <aside id="settingsSheet" class="sheet" aria-label="設定">
+      <div class="sheet-head">
+        <span>設定</span>
+        <button id="closeSettingsBtn" class="tool-btn icon-only">✕</button>
+      </div>
+
+      <div class="setting-block">
+        <div class="setting-label"><span>キャラクター（VOICEVOX）</span></div>
+        <div id="charGrid" class="char-grid"></div>
+      </div>
+
+      <div class="setting-block">
+        <label class="setting-label" for="modelSelect"><span>AI モデル（速度 ↔ 賢さ）</span></label>
+        <select id="modelSelect" class="setting-select"></select>
+      </div>
+
+      <div class="setting-block">
+        <label class="setting-label" for="speedRange"><span>読み上げ速度</span><span id="speedVal">1.12x</span></label>
+        <input id="speedRange" type="range" min="0.8" max="1.5" step="0.04" value="1.12" />
+      </div>
+
+      <button id="nightToggle" class="row-btn">
+        <span>ナイトモード（暗め表示）</span>
+        <span id="nightState">OFF</span>
+      </button>
+
+      <button id="resetBtn" class="row-btn">
+        <span>会話の記憶と履歴をリセット</span>
+        <span>↺</span>
+      </button>
+    </aside>
+
+    <!-- 履歴シート -->
+    <aside id="historySheet" class="sheet" aria-label="会話履歴">
+      <div class="sheet-head">
+        <span>会話履歴</span>
+        <button id="closeHistoryBtn" class="tool-btn icon-only">✕</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </aside>
+  </div>
+  <div class="preview-caption">Echo Show 5 実機比率プレビュー（物理 960×480 / 195dpi → 実効 788×394・2:1）</div>
+
+  <script>
+    if (new URLSearchParams(location.search).get("preview") === "1") {
+      document.body.classList.add("preview-frame");
+    }
+
+    const GREETINGS = {
+      "ずんだもん": "ボタンを押すか、自動検知をオンにして話しかけてほしいのだ！",
+      "四国めたん": "準備はできておりますわ。いつでも話しかけてくださいませ。",
+      "春日部つむぎ": "いつでも準備オッケーだよ！気軽に話しかけてねー！",
+      "雨晴はう": "こんにちは。何かお手伝いできることがあれば話しかけてくださいね。",
+      "九州そら": "準備は整っております。いつでもお声がけくださいね。",
+      "WhiteCUL": "準備はできてるよ。何か話したいことがあったら声をかけて。",
+      "後鬼": "いつでも構わないわ。話したいことがあれば声をかけてちょうだい。",
+      "中国うさぎ": "あ、こんにちは…いつでも話しかけていいよ。",
+      "東北ずん子": "こんにちは！いつでも気軽に話しかけてくださいね！",
+      "東北イタコ": "いつでも準備はできておりますわ。何でもお話しくださいませ。",
+      "あんこもん": "んー…まあ、話しかけてくれたら相手してやるのだ。",
+      "ブイブイ・コバコ": "準備バッチリだよ！なんでも話しかけてね！",
+    };
+
+    const portraitImg = document.getElementById("portraitImg");
+    const speakerNameEl = document.getElementById("speakerName");
+    const speakerStyleEl = document.getElementById("speakerStyle");
+    const leftPane = document.getElementById("leftPane");
+    const leftHeader = document.getElementById("leftHeader");
+    const replyText = document.getElementById("replyText");
+    const userUtterance = document.getElementById("userUtterance");
+    const metaText = document.getElementById("metaText");
+    const talkBtn = document.getElementById("talkBtn");
+    const talkLabel = document.getElementById("talkLabel");
+    const rightPane = document.getElementById("rightPane");
+    const waveBars = Array.from(document.querySelectorAll(".wave-bar"));
+    const replayBtn = document.getElementById("replayBtn");
+
+    const backdrop = document.getElementById("backdrop");
+    const settingsSheet = document.getElementById("settingsSheet");
+    const historySheet = document.getElementById("historySheet");
+    const charGrid = document.getElementById("charGrid");
+    const modelSelect = document.getElementById("modelSelect");
+    const speedRange = document.getElementById("speedRange");
+    const speedVal = document.getElementById("speedVal");
+    const nightToggle = document.getElementById("nightToggle");
+    const nightState = document.getElementById("nightState");
+    const resetBtn = document.getElementById("resetBtn");
+    const historyList = document.getElementById("historyList");
+
+    const prefs = {
+      speakerId: Number(localStorage.getItem("speakerId") || 3),
+      speed: Number(localStorage.getItem("speed") || 1.12),
+      night: localStorage.getItem("night") === "1",
+    };
+
+    let speakersList = [];
+    let modelsList = [];
+    let historyItems = [];
+    let hasChatted = false;
+
+    // 状態: "idle" | "recording" | "thinking" | "speaking"
+    let callState = "idle";
+    let stream = null;
+    let audioCtx = null;
+    let micAnalyser = null;
+    let meterRaf = null;
+    let mediaRecorder = null;
+    let recChunks = [];
+    let abortCtrl = null;
+    let playAnalyser = null;
+    let lipSyncRaf = null;
+    let activeSources = [];
+    let lastReplyAudios = [];
+    let playChain = Promise.resolve();
+    let replyAcc = "";
+    let currentSentenceHappy = false;
+    let currentExpr = "idle";
+    let exprUrls = { idle: "", blink: "", speak: "", think: "", happy: "" };
+    let blinkTimer = null;
+
+    // 優しい効果音（Web Audio API 合成）
+    function playChime(kind) {
+      if (!audioCtx) return;
+      try {
+        const now = audioCtx.currentTime;
+        const notes = kind === "start" ? [523.25, 659.25] :
+                      kind === "commit" ? [783.99] :
+                      kind === "end" ? [659.25, 440.0] : [];
+        notes.forEach((freq, i) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + i * 0.08);
+          gain.gain.setValueAtTime(0.001, now + i * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.08, now + i * 0.08 + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.14);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + i * 0.08);
+          osc.stop(now + i * 0.08 + 0.16);
+        });
+      } catch (_) {}
+    }
+
+    function setExpression(expr) {
+      if (!exprUrls[expr] || currentExpr === expr) return;
+      currentExpr = expr;
+      portraitImg.src = exprUrls[expr];
+    }
+
+    function scheduleBlink() {
+      if (blinkTimer) clearTimeout(blinkTimer);
+      const wait = 3000 + Math.random() * 3200;
+      blinkTimer = setTimeout(() => {
+        if ((callState === "idle" || callState === "listening") && currentExpr === "idle") {
+          setExpression("blink");
+          setTimeout(() => {
+            if ((callState === "idle" || callState === "listening") && currentExpr === "blink") {
+              setExpression("idle");
+              if (Math.random() < 0.15) {
+                setTimeout(() => {
+                  if ((callState === "idle" || callState === "listening") && currentExpr === "idle") {
+                    setExpression("blink");
+                    setTimeout(() => {
+                      if (currentExpr === "blink") setExpression("idle");
+                    }, 95);
+                  }
+                }, 130);
+              }
+            }
+          }, 95);
+        }
+        scheduleBlink();
+      }, wait);
+    }
+    scheduleBlink();
+
+    function triggerPortraitMotion(cls) {
+      portraitImg.classList.remove("anim-hop", "anim-nod");
+      void portraitImg.offsetWidth;
+      portraitImg.classList.add(cls);
+      portraitImg.addEventListener("animationend", () => {
+        portraitImg.classList.remove(cls);
+      }, { once: true });
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const days = ["日", "月", "火", "水", "木", "金", "土"];
+      document.getElementById("clockTime").textContent = `${hh}:${mm}`;
+      document.getElementById("clockDate").textContent = `${now.getMonth() + 1}/${now.getDate()} (${days[now.getDay()]})`;
+    }
+    updateClock();
+    setInterval(updateClock, 10000);
+
+    function hexToRgba(hex, alpha) {
+      const m = hex.replace("#", "").match(/.{2}/g);
+      if (!m) return `rgba(116, 217, 105, ${alpha})`;
+      const [r, g, b] = m.map(x => parseInt(x, 16));
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function applyCharacterVisual() {
+      const sp = speakersList.find(s => s.id === prefs.speakerId) || {
+        id: 3, name: "ずんだもん", style: "ノーマル", color: "#74D969"
+      };
+      const color = sp.color || "#74D969";
+      document.documentElement.style.setProperty("--accent", color);
+      document.documentElement.style.setProperty("--accent-soft", hexToRgba(color, 0.24));
+      document.documentElement.style.setProperty("--accent-dim", hexToRgba(color, 0.13));
+      speakerNameEl.textContent = sp.name;
+      speakerStyleEl.textContent = sp.style;
+      if (!hasChatted) {
+        replyText.textContent = GREETINGS[sp.name] || "いつでも話しかけてね！";
+      }
+      exprUrls = {
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru4`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru4`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru4`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru4`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru4`,
+      };
+      Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
+      currentExpr = "idle";
+      portraitImg.style.opacity = "0";
+      setTimeout(() => {
+        portraitImg.src = exprUrls.idle;
+        portraitImg.onload = () => { portraitImg.style.opacity = "1"; };
+      }, 90);
+      renderCharGrid();
+      sendWsConfig();
+    }
+
+    function renderCharGrid() {
+      charGrid.innerHTML = speakersList.map(sp => `
+        <button class="char-card ${sp.id === prefs.speakerId ? "selected" : ""}" data-id="${sp.id}">
+          <img src="/api/character/${sp.id}/icon?v=ahiru6" alt="${sp.name}" />
+          <div>
+            <div class="char-card-name">${sp.name}</div>
+            <div class="char-card-style">${sp.style}</div>
+          </div>
+        </button>
+      `).join("");
+      charGrid.querySelectorAll(".char-card").forEach(btn => {
+        btn.addEventListener("click", () => {
+          prefs.speakerId = Number(btn.dataset.id);
+          localStorage.setItem("speakerId", String(prefs.speakerId));
+          applyCharacterVisual();
+        });
+      });
+    }
+
+    function applyNight() {
+      document.body.classList.toggle("night", prefs.night);
+      nightState.textContent = prefs.night ? "ON" : "OFF";
+      localStorage.setItem("night", prefs.night ? "1" : "0");
+    }
+    applyNight();
+
+    speedRange.value = String(prefs.speed);
+    speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
+
+    function setCallState(next) {
+      callState = next;
+      document.body.classList.remove("mode-listening", "mode-recording", "mode-thinking", "mode-speaking");
+      if (next !== "idle") document.body.classList.add(`mode-${next}`);
+
+      if (next === "idle") {
+        talkLabel.textContent = "話す";
+        setExpression("idle");
+        waveBars.forEach(b => b.style.height = "5px");
+      } else if (next === "recording") {
+        talkLabel.textContent = "送信する";
+        setExpression("idle");
+      } else if (next === "thinking") {
+        talkLabel.textContent = "考え中...";
+        setExpression("think");
+      } else if (next === "speaking") {
+        talkLabel.textContent = "割り込む";
+      }
+    }
+
+    async function loadHealth() {
+      try {
+        const res = await fetch("/api/health");
+        const data = await res.json();
+        if (data.speakers && speakersList.length === 0) {
+          speakersList = data.speakers;
+          applyCharacterVisual();
+        }
+        if (data.models && modelsList.length === 0) {
+          modelsList = data.models;
+          modelSelect.innerHTML = modelsList.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
+        }
+        if (data.agy_model) modelSelect.value = data.agy_model;
+      } catch (_) {}
+    }
+    loadHealth();
+    setInterval(loadHealth, 15000);
+
+    async function unlockAudio() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new Ctx();
+      }
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+    }
+
+    function sendWsConfig() {}
+
+    function stopPlaybackOnly() {
+      if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
+      activeSources.forEach(s => { try { s.stop(); } catch (_) {} });
+      activeSources = [];
+      playChain = Promise.resolve();
+      stopLipSync();
+    }
+
+    async function playWavBytes(audioBytes, sentenceText = "") {
+      await unlockAudio();
+      if (!playAnalyser) {
+        playAnalyser = audioCtx.createAnalyser();
+        playAnalyser.fftSize = 256;
+        playAnalyser.connect(audioCtx.destination);
+      }
+      currentSentenceHappy = /[！!♪♫嬉楽最高ありがと]/.test(sentenceText);
+      if (currentSentenceHappy) triggerPortraitMotion("anim-hop");
+      const copy = audioBytes.buffer.slice(audioBytes.byteOffset, audioBytes.byteOffset + audioBytes.byteLength);
+      const audioBuffer = await audioCtx.decodeAudioData(copy);
+      return new Promise((resolve) => {
+        if (callState !== "speaking") { resolve(); return; }
+        const src = audioCtx.createBufferSource();
+        src.buffer = audioBuffer;
+        src.connect(playAnalyser);
+        activeSources.push(src);
+        startLipSync();
+        src.onended = () => {
+          activeSources = activeSources.filter(s => s !== src);
+          if (activeSources.length === 0) setExpression("idle");
+          resolve();
+        };
+        src.start(0);
+      });
+    }
+
+    function addHistory(role, text) {
+      historyItems.push({ role, text });
+      if (historyItems.length > 30) historyItems.shift();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (historyItems.length === 0) {
+        historyList.innerHTML = `<div style="color:var(--muted);font-size:13px;">まだ会話履歴はありません。</div>`;
+        return;
+      }
+      historyList.innerHTML = historyItems.map(it =>
+        `<div class="hist-item ${it.role}">${it.text.replace(/</g, "&lt;")}</div>`
+      ).join("");
+      historyList.scrollTop = historyList.scrollHeight;
+    }
+    renderHistory();
+
+    function stopLipSync() {
+      if (lipSyncRaf) cancelAnimationFrame(lipSyncRaf);
+      lipSyncRaf = null;
+      if (callState !== "recording" && callState !== "thinking") {
+        setExpression("idle");
+        waveBars.forEach(b => b.style.height = "5px");
+      }
+    }
+
+    function startLipSync() {
+      if (!playAnalyser) return;
+      if (lipSyncRaf) cancelAnimationFrame(lipSyncRaf);
+      const buf = new Uint8Array(playAnalyser.frequencyBinCount);
+      let lastLoudAt = 0;
+      function tick() {
+        if (callState !== "speaking") {
+          stopLipSync();
+          return;
+        }
+        playAnalyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / buf.length);
+        const now = performance.now();
+        if (rms > 0.028) {
+          lastLoudAt = now;
+          setExpression(currentSentenceHappy ? "happy" : "speak");
+        } else if (now - lastLoudAt > 145) {
+          setExpression("idle");
+        }
+        const weights = [0.55, 0.85, 1.0, 0.85, 0.55];
+        waveBars.forEach((bar, idx) => {
+          const h = Math.min(20, Math.max(4, Math.round(4 + rms * 140 * weights[idx])));
+          bar.style.height = `${h}px`;
+        });
+        lipSyncRaf = requestAnimationFrame(tick);
+      }
+      lipSyncRaf = requestAnimationFrame(tick);
+    }
+
+    function startMicMeter() {
+      if (!micAnalyser) return;
+      if (meterRaf) cancelAnimationFrame(meterRaf);
+      const buf = new Uint8Array(micAnalyser.frequencyBinCount);
+      function tick() {
+        if (callState !== "recording") {
+          waveBars.forEach(b => b.style.height = "5px");
+          return;
+        }
+        micAnalyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / buf.length);
+        const weights = [0.55, 0.85, 1.0, 0.85, 0.55];
+        waveBars.forEach((bar, idx) => {
+          const h = Math.min(20, Math.max(4, Math.round(4 + rms * 180 * weights[idx])));
+          bar.style.height = `${h}px`;
+        });
+        meterRaf = requestAnimationFrame(tick);
+      }
+      meterRaf = requestAnimationFrame(tick);
+    }
+
+    function stopMicMeter() {
+      if (meterRaf) cancelAnimationFrame(meterRaf);
+      meterRaf = null;
+      waveBars.forEach(b => b.style.height = "5px");
+    }
+
+    async function sendAudioStream(blob) {
+      setCallState("thinking");
+      playChime("commit");
+      replyAcc = "";
+      lastReplyAudios = [];
+      playChain = Promise.resolve();
+      abortCtrl = new AbortController();
+      metaText.textContent = "文字起こし中...";
+
+      try {
+        const fd = new FormData();
+        fd.append("file", blob, "voice.webm");
+        fd.append("speaker_id", String(prefs.speakerId));
+        fd.append("speed_scale", String(prefs.speed));
+
+        const res = await fetch("/api/chat/audio/stream", {
+          method: "POST", body: fd, signal: abortCtrl.signal,
+        });
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let lineBuf = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          lineBuf += decoder.decode(value, { stream: true });
+          const lines = lineBuf.split("\n");
+          lineBuf = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const ev = JSON.parse(line);
+            if (ev.type === "empty") {
+              metaText.textContent = "聞き取れませんでした";
+              setCallState("idle");
+              return;
+            } else if (ev.type === "stt") {
+              hasChatted = true;
+              userUtterance.textContent = `あなた「${ev.user_text}」`;
+              userUtterance.classList.add("visible");
+              addHistory("user", ev.user_text);
+              replyText.textContent = "……";
+              metaText.textContent = `認識 ${ev.stt_sec}s`;
+            } else if (ev.type === "audio") {
+              replyAcc += (replyAcc ? " " : "") + ev.text;
+              replyText.textContent = replyAcc;
+              const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
+              lastReplyAudios.push(audioBytes);
+              replayBtn.style.display = "inline-flex";
+              setCallState("speaking");
+              playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
+            } else if (ev.type === "done" && ev.timings) {
+              if (replyAcc) addHistory("ai", replyAcc);
+              metaText.textContent = `認識 ${ev.timings.stt}s / 初声 ${ev.timings.first_audio}s`;
+            }
+          }
+        }
+
+        await playChain;
+        setCallState("idle");
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        metaText.textContent = "エラー: " + err.message;
+        setCallState("idle");
+      }
+    }
+
+    async function startRecordingManual() {
+      if (callState === "recording") return;
+      try {
+        await unlockAudio();
+        if (!stream) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
+        }
+        if (!micAnalyser) {
+          const srcNode = audioCtx.createMediaStreamSource(stream);
+          micAnalyser = audioCtx.createAnalyser();
+          micAnalyser.fftSize = 256;
+          srcNode.connect(micAnalyser);
+        }
+        recChunks = [];
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus" : "audio/webm";
+        const mr = new MediaRecorder(stream, { mimeType });
+        mediaRecorder = mr;
+        mr.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recChunks.push(e.data);
+        };
+        mr.onstop = () => {
+          stopMicMeter();
+          const blob = new Blob(recChunks, { type: mimeType });
+          recChunks = [];
+          sendAudioStream(blob);
+        };
+        mr.start(200);
+        setCallState("recording");
+        playChime("start");
+        triggerPortraitMotion("anim-nod");
+        metaText.textContent = "聞いています...";
+        startMicMeter();
+      } catch (err) {
+        metaText.textContent = "マイクエラー: " + err.message;
+        setCallState("idle");
+      }
+    }
+
+    function stopRecordingManual() {
+      if (callState !== "recording" || !mediaRecorder) return;
+      stopMicMeter();
+      mediaRecorder.stop();
+      mediaRecorder = null;
+    }
+
+    async function handleMainTap() {
+      await unlockAudio().catch(() => {});
+      if (callState === "speaking") {
+        stopPlaybackOnly();
+        await startRecordingManual();
+        return;
+      }
+      if (callState === "thinking") return;
+      if (callState === "recording") {
+        stopRecordingManual();
+      } else {
+        await startRecordingManual();
+      }
+    }
+
+    talkBtn.addEventListener("click", handleMainTap);
+    rightPane.addEventListener("click", handleMainTap);
+    leftPane.addEventListener("click", (e) => {
+      if (leftHeader.contains(e.target)) return;
+      handleMainTap();
+    });
+
+    replayBtn.addEventListener("click", async () => {
+      if (lastReplyAudios.length === 0 || callState === "thinking" || callState === "speaking" || callState === "recording") return;
+      setCallState("speaking");
+      for (const bytes of lastReplyAudios) {
+        if (callState !== "speaking") break;
+        await playWavBytes(bytes, "");
+      }
+      setCallState("idle");
+    });
+
+    function closeSheets() {
+      settingsSheet.classList.remove("open");
+      historySheet.classList.remove("open");
+      backdrop.classList.remove("open");
+    }
+    document.getElementById("settingsBtn").addEventListener("click", () => {
+      closeSheets();
+      settingsSheet.classList.add("open");
+      backdrop.classList.add("open");
+    });
+    document.getElementById("historyBtn").addEventListener("click", () => {
+      closeSheets();
+      historySheet.classList.add("open");
+      backdrop.classList.add("open");
+    });
+    document.getElementById("closeSettingsBtn").addEventListener("click", closeSheets);
+    document.getElementById("closeHistoryBtn").addEventListener("click", closeSheets);
+    backdrop.addEventListener("click", closeSheets);
+
+    modelSelect.addEventListener("change", async () => {
+      const mId = modelSelect.value;
+      metaText.textContent = "モデル切替中...";
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agy_model: mId }),
+      });
+      metaText.textContent = "モデル切替完了";
+    });
+
+    speedRange.addEventListener("input", () => {
+      prefs.speed = Number(speedRange.value);
+      speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
+      localStorage.setItem("speed", String(prefs.speed));
+      sendWsConfig();
+    });
+
+    nightToggle.addEventListener("click", () => {
+      prefs.night = !prefs.night;
+      applyNight();
+    });
+
+    resetBtn.addEventListener("click", async () => {
+      stopPlaybackOnly();
+      await fetch("/api/reset", { method: "POST" });
+      historyItems = [];
+      hasChatted = false;
+      renderHistory();
+      userUtterance.classList.remove("visible");
+      replayBtn.style.display = "none";
+      lastReplyAudios = [];
+      applyCharacterVisual();
+      closeSheets();
+      setCallState("idle");
+      metaText.textContent = "リセットしました";
+    });
+
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    async function requestWakeLock() {
+      if (!("wakeLock" in navigator)) return;
+      try { await navigator.wakeLock.request("screen"); } catch (_) {}
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") requestWakeLock();
+    });
+    requestWakeLock();
+  </script>
+</body>
+</html>

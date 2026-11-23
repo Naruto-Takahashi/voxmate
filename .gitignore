@@ -1,0 +1,20 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local assets, binaries, logs, and runtime data
+voicevox/
+custom_psd/
+static/portraits/
+arm_ChromePublic.apk
+*.log
+chat_workspace/
+.env
+.DS_Store
