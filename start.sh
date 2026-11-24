@@ -42,5 +42,5 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting VoxMate server..."
-exec uv run python server.py
+echo "Starting VoxMate server on http://127.0.0.1:8000 ..."
+exec uv run python -m uvicorn server:app --host 127.0.0.1 --port 8000
