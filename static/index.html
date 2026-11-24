@@ -674,12 +674,12 @@
       </div>
 
       <div class="setting-block">
-        <div class="setting-label"><span>キャラクター（VOICEVOX）</span></div>
+        <div class="setting-label"><span>キャラクター</span></div>
         <div id="charGrid" class="char-grid"></div>
       </div>
 
       <div class="setting-block">
-        <label class="setting-label" for="modelSelect"><span>AI モデル（速度 ↔ 賢さ）</span></label>
+        <label class="setting-label" for="modelSelect"><span>AI モデル</span></label>
         <select id="modelSelect" class="setting-select"></select>
       </div>
 
@@ -689,7 +689,7 @@
       </div>
 
       <button id="nightToggle" class="row-btn">
-        <span>ナイトモード（暗め表示）</span>
+        <span>ナイトモード</span>
         <span id="nightState">OFF</span>
       </button>
 
@@ -1173,7 +1173,7 @@
       lastReplyAudios = [];
       playChain = Promise.resolve();
       abortCtrl = new AbortController();
-      metaText.textContent = "文字起こし中...";
+      metaText.textContent = "音声処理中...";
 
       try {
         const fd = new FormData();
@@ -1212,7 +1212,7 @@
               userUtterance.classList.add("visible");
               addHistory("user", ev.user_text);
               replyText.textContent = "……";
-              metaText.textContent = `認識 ${ev.stt_sec}s`;
+              metaText.textContent = "考え中...";
             } else if (ev.type === "audio") {
               replyAcc += (replyAcc ? " " : "") + ev.text;
               replyText.textContent = replyAcc;
@@ -1223,7 +1223,7 @@
               playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
             } else if (ev.type === "done" && ev.timings) {
               if (replyAcc) addHistory("ai", replyAcc);
-              metaText.textContent = `認識 ${ev.timings.stt}s / 初声 ${ev.timings.first_audio}s`;
+              metaText.textContent = `応答 ${ev.timings.first_audio}s`;
             }
           }
         }

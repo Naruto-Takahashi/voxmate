@@ -58,9 +58,9 @@ PRESET_SPEAKERS = [
 ]
 
 ALLOWED_MODELS = {
-    "gemini-3.8-flash-low": "爆速 (Flash Low)",
-    "gemini-4-hydrogen-low": "バランス (Hydrogen Low)",
-    "gemini-4-neon-low": "高品質 (Neon Low)",
+    "gemini-3.8-flash-low": "高速 (Flash)",
+    "gemini-4-hydrogen-low": "標準 (Hydrogen)",
+    "gemini-4-neon-low": "高精度 (Neon)",
 }
 
 
