@@ -435,7 +435,10 @@ def transcribe_audio_bytes(audio_bytes: bytes, suffix: str = ".webm") -> str:
 
 @app.get("/")
 async def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    return FileResponse(
+        str(STATIC_DIR / "index.html"),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/sw.js")
