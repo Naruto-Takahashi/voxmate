@@ -1092,30 +1092,33 @@
     let currentEnvStepSec = 1 / 30;
     let playbackResolve = null;
 
-    async function unlockAudio() {
-      if (!audioCtx) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new Ctx();
-      }
-      if (audioCtx.state === "suspended") {
-        await audioCtx.resume();
-      }
-      if (!audioUnlocked && audioCtx.state === "running") {
-        try {
+    function unlockAudio() {
+      try {
+        if (!audioCtx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new Ctx();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
+        if (!audioUnlocked && audioCtx.state === "running") {
           const b = audioCtx.createBuffer(1, 1, 22050);
           const s = audioCtx.createBufferSource();
           s.buffer = b;
           s.connect(audioCtx.destination);
           s.start(0);
           audioUnlocked = true;
-        } catch (_) {}
-      }
+        }
+      } catch (_) {}
       if (!sharedElUnlocked) {
+        sharedElUnlocked = true;
         try {
           sharedAudioEl.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-          await sharedAudioEl.play();
-          sharedElUnlocked = true;
-        } catch (_) {}
+          const p = sharedAudioEl.play();
+          if (p && p.catch) p.catch(() => { sharedElUnlocked = false; });
+        } catch (_) {
+          sharedElUnlocked = false;
+        }
       }
     }
 
@@ -1172,7 +1175,7 @@
     }
 
     async function playWavBytes(audioBytes, sentenceText = "") {
-      await unlockAudio();
+      unlockAudio();
       currentSentenceHappy = /[！!♪♫嬉楽最高ありがと]/.test(sentenceText);
       if (currentSentenceHappy) triggerPortraitMotion("anim-hop");
       const { env, stepSec } = extractWavEnvelope(audioBytes, 30);
@@ -1371,7 +1374,7 @@
       const trimmed = (text || "").trim();
       if (!trimmed || callState === "thinking" || callState === "recording") return;
       if (callState === "speaking") stopPlaybackOnly();
-      await unlockAudio().catch(() => {});
+      unlockAudio();
 
       setCallState("thinking");
       playChime("commit");
@@ -1416,7 +1419,7 @@
     async function startRecordingManual() {
       if (callState === "recording") return;
       try {
-        await unlockAudio();
+        unlockAudio();
         if (!stream || stream.getAudioTracks().every(t => t.readyState !== "live")) {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -1519,8 +1522,9 @@
     async function handleMainTap() {
       if (isTapping) return;
       isTapping = true;
+      const unlockTimer = setTimeout(() => { isTapping = false; }, 1200);
       try {
-        await unlockAudio().catch(() => {});
+        unlockAudio();
         if (callState === "speaking") {
           stopPlaybackOnly();
           await startRecordingManual();
@@ -1533,6 +1537,7 @@
           await startRecordingManual();
         }
       } finally {
+        clearTimeout(unlockTimer);
         isTapping = false;
       }
     }
@@ -1546,7 +1551,7 @@
     });
     textBar.addEventListener("submit", (e) => {
       e.preventDefault();
-      unlockAudio().catch(() => {});
+      unlockAudio();
       const val = textInput.value;
       if (!val.trim()) return;
       textInput.value = "";
