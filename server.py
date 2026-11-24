@@ -390,6 +390,20 @@ async def manifest():
     )
 
 
+@app.get("/ca.crt")
+async def download_ca_cert():
+    ca_path = Path(
+        os.environ.get("VOXDESK_CA_CERT", os.path.expanduser("~/.config/voxdesk/certs/rootCA.pem"))
+    ).expanduser()
+    if not ca_path.exists():
+        raise HTTPException(status_code=404, detail="CA certificate not configured")
+    return FileResponse(
+        str(ca_path),
+        media_type="application/x-x509-ca-cert",
+        filename="voxdesk-ca.crt",
+    )
+
+
 def _find_speaker(speaker_id: int) -> Optional[dict]:
     for sp in PRESET_SPEAKERS:
         if sp["id"] == speaker_id:
@@ -944,3 +958,35 @@ async def ws_voice(websocket: WebSocket):
     finally:
         if processing_task and not processing_task.done():
             processing_task.cancel()
+
+
+async def _serve_app() -> None:
+    import uvicorn
+
+    host = os.environ.get("VOXDESK_HOST", "127.0.0.1")
+    http_port = int(os.environ.get("VOXDESK_PORT", "8000"))
+    https_port = int(os.environ.get("VOXDESK_HTTPS_PORT", "8443"))
+    ssl_cert = os.environ.get("VOXDESK_SSL_CERT", "")
+    ssl_key = os.environ.get("VOXDESK_SSL_KEY", "")
+
+    servers = [
+        uvicorn.Server(uvicorn.Config(app, host=host, port=http_port)),
+    ]
+    if ssl_cert and ssl_key and Path(ssl_cert).exists() and Path(ssl_key).exists():
+        servers.append(
+            uvicorn.Server(
+                uvicorn.Config(
+                    app,
+                    host=host,
+                    port=https_port,
+                    ssl_certfile=ssl_cert,
+                    ssl_keyfile=ssl_key,
+                    lifespan="off",
+                )
+            )
+        )
+    await asyncio.gather(*(s.serve() for s in servers))
+
+
+if __name__ == "__main__":
+    asyncio.run(_serve_app())
