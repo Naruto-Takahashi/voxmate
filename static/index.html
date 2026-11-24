@@ -273,6 +273,51 @@
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.09);
       border-bottom-left-radius: 5px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .chat-bubble.ai:hover {
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .chat-bubble.ai.is-playing {
+      border-color: var(--accent);
+    }
+
+    @keyframes bubbleIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .chat-bubble.bubble-enter {
+      animation: bubbleIn 0.18s ease-out;
+    }
+
+    .bubble-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
+    .bubble-copy {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      opacity: 0.72;
+      transition: opacity 0.15s, color 0.15s, background 0.15s;
+    }
+    .bubble-copy:hover {
+      opacity: 1;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .bubble-copy.copied {
+      color: var(--accent);
+      opacity: 1;
     }
 
     /* 右下フローティング・コンパクトマイクピル（画面を圧迫しない） */
@@ -577,11 +622,11 @@
     /* スリムな統合コンポーザーバー（案1） */
     .text-bar {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       gap: 8px;
       margin-top: 8px;
       padding: 4px 4px 4px 14px;
-      border-radius: 999px;
+      border-radius: 22px;
       border: 1px solid var(--border);
       background: rgba(15, 20, 28, 0.84);
       flex-shrink: 0;
@@ -596,12 +641,17 @@
     .text-input {
       flex: 1;
       min-width: 0;
-      height: 36px;
-      padding: 0;
+      min-height: 36px;
+      max-height: 112px;
+      padding: 7px 0;
       border: none;
       background: transparent;
       color: var(--text);
+      font-family: inherit;
       font-size: 14px;
+      line-height: 1.45;
+      resize: none;
+      overflow-y: auto;
       outline: none;
     }
     .text-input::placeholder { color: var(--muted); }
@@ -746,12 +796,7 @@
             <span id="clockDate" class="clock-date"></span>
           </div>
           <div class="header-tools">
-            <button id="replayBtn" class="tool-btn icon-only" style="display:none;" aria-label="もう一回再生" title="もう一回再生">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                <path d="M3 3v5h5" />
-              </svg>
-            </button>
+            <button id="muteBtn" class="tool-btn icon-only" aria-label="音声オン" title="音声オン/オフ"></button>
             <button id="kbdBtn" class="tool-btn icon-only kbd-toggle" aria-label="文字入力" title="文字入力">⌨</button>
             <button id="settingsBtn" class="tool-btn icon-only" aria-label="メニュー" title="メニュー">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -777,7 +822,7 @@
           </div>
 
           <form id="textBar" class="text-bar" autocomplete="off">
-            <input id="textInput" class="text-input" type="text" placeholder="メッセージを入力..." />
+            <textarea id="textInput" class="text-input" rows="1" placeholder="メッセージを入力..."></textarea>
             <button id="textSendBtn" type="submit" class="text-send">送信</button>
             <button id="textMicBtn" type="button" class="text-mic-btn">
               <span class="talk-left">
@@ -883,7 +928,7 @@
     const talkLabels = Array.from(document.querySelectorAll(".talk-label"));
     const rightPane = document.getElementById("rightPane");
     const waveBars = Array.from(document.querySelectorAll(".wave-bar"));
-    const replayBtn = document.getElementById("replayBtn");
+    const muteBtn = document.getElementById("muteBtn");
 
     const backdrop = document.getElementById("backdrop");
     const settingsSheet = document.getElementById("settingsSheet");
@@ -899,7 +944,23 @@
       speakerId: Number(localStorage.getItem("speakerId") || 3),
       speed: Number(localStorage.getItem("speed") || 1.12),
       night: localStorage.getItem("night") === "1",
+      silent: localStorage.getItem("silent") === "1",
     };
+
+    function applyMuteUi() {
+      muteBtn.setAttribute("aria-label", prefs.silent ? "サイレント中（タップで音声オン）" : "音声オン（タップでサイレント）");
+      muteBtn.style.color = prefs.silent ? "var(--rec)" : "";
+      muteBtn.innerHTML = prefs.silent
+        ? `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
+        : `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+    }
+    applyMuteUi();
+    muteBtn.addEventListener("click", () => {
+      prefs.silent = !prefs.silent;
+      localStorage.setItem("silent", prefs.silent ? "1" : "0");
+      applyMuteUi();
+      metaText.textContent = prefs.silent ? "サイレントモード" : "音声オン";
+    });
 
     let speakersList = [];
     let modelsList = [];
@@ -1121,12 +1182,9 @@
         const prevLast = historyItems[historyItems.length - 1]?.text;
         historyItems = data.history.slice();
         hasChatted = historyItems.length > 0;
-        const hasAi = historyItems.some(h => h.role === "ai");
-        replayBtn.style.display = hasAi ? "inline-flex" : "none";
-        if (historyItems.length !== prevLen || historyItems[historyItems.length - 1]?.text !== prevLast) {
-          lastReplyAudios = [];
-        }
-        renderChatFeed();
+        const updated = historyItems.length !== prevLen || historyItems[historyItems.length - 1]?.text !== prevLast;
+        if (updated) lastReplyAudios = [];
+        renderChatFeed(null, updated);
       }
       if (needVisual) applyCharacterVisual();
     }
@@ -1322,10 +1380,66 @@
     function addHistory(role, text) {
       historyItems.push({ role, text });
       if (historyItems.length > 30) historyItems.shift();
-      renderChatFeed();
+      renderChatFeed(null, true);
     }
 
-    function renderChatFeed(streamingText = null) {
+    const COPY_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+    const CHECK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+    const bubbleTtsCache = new Map();
+    let playingBubbleIdx = -1;
+
+    async function playBubbleText(text, idx) {
+      if (callState === "thinking" || callState === "recording") return;
+      if (callState === "speaking" && playingBubbleIdx === idx) {
+        stopPlaybackOnly();
+        playingBubbleIdx = -1;
+        setCallState("idle");
+        renderChatFeed(null, false);
+        return;
+      }
+      if (callState === "speaking") stopPlaybackOnly();
+      unlockAudio();
+      playingBubbleIdx = idx;
+      renderChatFeed(null, false);
+
+      let wavBytes = bubbleTtsCache.get(text);
+      if (!wavBytes) {
+        setCallState("thinking");
+        metaText.textContent = "音声生成中...";
+        try {
+          const res = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text,
+              speaker_id: prefs.speakerId,
+              speed_scale: prefs.speed,
+            }),
+          });
+          const data = await res.json();
+          if (data.audio_base64) {
+            wavBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+            bubbleTtsCache.set(text, wavBytes);
+          }
+        } catch (_) {}
+      }
+      if (!wavBytes) {
+        playingBubbleIdx = -1;
+        setCallState("idle");
+        renderChatFeed(null, false);
+        return;
+      }
+      setCallState("speaking");
+      metaText.textContent = "再生中...";
+      await playWavBytes(wavBytes, text);
+      playingBubbleIdx = -1;
+      setCallState("idle");
+      metaText.textContent = "準備完了";
+      renderChatFeed(null, false);
+    }
+
+    function renderChatFeed(streamingText = null, animateLast = false) {
       const items = historyItems.slice();
       if (items.length === 0 && streamingText === null) {
         const sp = speakersList.find(s => s.id === prefs.speakerId);
@@ -1333,13 +1447,48 @@
         chatFeed.innerHTML = `<div class="chat-bubble ai">${escHtml(greet)}</div>`;
         return;
       }
-      let html = items.map(it =>
-        `<div class="chat-bubble ${it.role}">${escHtml(it.text)}</div>`
-      ).join("");
+      let html = items.map((it, idx) => {
+        const enterCls = (animateLast && streamingText === null && idx === items.length - 1) ? " bubble-enter" : "";
+        if (it.role === "user") {
+          return `<div class="chat-bubble user${enterCls}">${escHtml(it.text)}</div>`;
+        }
+        const playCls = (playingBubbleIdx === idx) ? " is-playing" : "";
+        return `<div class="chat-bubble ai${enterCls}${playCls}" data-idx="${idx}" title="タップで再生">` +
+          `<div>${escHtml(it.text)}</div>` +
+          `<div class="bubble-actions"><button type="button" class="bubble-copy" data-copy-idx="${idx}" aria-label="コピー">${COPY_ICON}</button></div>` +
+          `</div>`;
+      }).join("");
       if (streamingText !== null) {
-        html += `<div class="chat-bubble ai">${escHtml(streamingText)}</div>`;
+        html += `<div class="chat-bubble ai${animateLast ? " bubble-enter" : ""}">${escHtml(streamingText)}</div>`;
       }
       chatFeed.innerHTML = html;
+
+      chatFeed.querySelectorAll(".bubble-copy").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const idx = Number(btn.dataset.copyIdx);
+          const txt = items[idx]?.text || "";
+          if (!txt) return;
+          try {
+            await navigator.clipboard.writeText(txt);
+            btn.classList.add("copied");
+            btn.innerHTML = CHECK_ICON;
+            setTimeout(() => {
+              btn.classList.remove("copied");
+              btn.innerHTML = COPY_ICON;
+            }, 1200);
+          } catch (_) {}
+        });
+      });
+
+      chatFeed.querySelectorAll(".chat-bubble.ai[data-idx]").forEach(el => {
+        el.addEventListener("click", () => {
+          const idx = Number(el.dataset.idx);
+          const txt = items[idx]?.text || "";
+          if (txt) playBubbleText(txt, idx);
+        });
+      });
+
       requestAnimationFrame(() => { chatScroll.scrollTop = chatScroll.scrollHeight; });
     }
     renderChatFeed();
@@ -1450,14 +1599,18 @@
           } else if (ev.type === "stt") {
             hasChatted = true;
             addHistory("user", ev.user_text);
-            renderChatFeed("……");
+            renderChatFeed("……", true);
             metaText.textContent = "考え中...";
+          } else if (ev.type === "progress") {
+            metaText.textContent = ev.label || "確認中...";
+          } else if (ev.type === "text") {
+            replyAcc += (replyAcc ? " " : "") + ev.text;
+            renderChatFeed(replyAcc, false);
           } else if (ev.type === "audio") {
             replyAcc += (replyAcc ? " " : "") + ev.text;
-            renderChatFeed(replyAcc);
+            renderChatFeed(replyAcc, false);
             const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
             lastReplyAudios.push(audioBytes);
-            replayBtn.style.display = "inline-flex";
             setCallState("speaking");
             playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
           } else if (ev.type === "done" && ev.timings) {
@@ -1485,6 +1638,7 @@
         fd.append("file", blob, `voice.${ext}`);
         fd.append("speaker_id", String(prefs.speakerId));
         fd.append("speed_scale", String(prefs.speed));
+        fd.append("silent", prefs.silent ? "true" : "false");
 
         const res = await fetch("/api/chat/audio/stream", {
           method: "POST", body: fd, signal: abortCtrl.signal,
@@ -1519,6 +1673,7 @@
             text: trimmed,
             speaker_id: prefs.speakerId,
             speed_scale: prefs.speed,
+            silent: prefs.silent,
           }),
           signal: abortCtrl.signal,
         });
@@ -1673,8 +1828,16 @@
     const textMicBtn = document.getElementById("textMicBtn");
     const syncTextBarState = () => {
       textBar.classList.toggle("has-text", textInput.value.trim().length > 0);
+      textInput.style.height = "auto";
+      textInput.style.height = Math.min(112, textInput.scrollHeight) + "px";
     };
     textInput.addEventListener("input", syncTextBarState);
+    textInput.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        textBar.requestSubmit();
+      }
+    });
     textMicBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       handleMainTap();
@@ -1696,43 +1859,6 @@
 
     talkBtn.addEventListener("click", handleMainTap);
     rightPane.addEventListener("click", handleMainTap);
-
-    replayBtn.addEventListener("click", async () => {
-      if (callState === "thinking" || callState === "speaking" || callState === "recording") return;
-      unlockAudio();
-      const lastAi = [...historyItems].reverse().find(h => h.role === "ai");
-      if (lastReplyAudios.length === 0 && lastAi) {
-        setCallState("thinking");
-        metaText.textContent = "音声生成中...";
-        try {
-          const res = await fetch("/api/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: lastAi.text,
-              speaker_id: prefs.speakerId,
-              speed_scale: prefs.speed,
-            }),
-          });
-          const data = await res.json();
-          if (data.audio_base64) {
-            lastReplyAudios = [Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0))];
-          }
-        } catch (_) {}
-      }
-      if (lastReplyAudios.length === 0) {
-        setCallState("idle");
-        return;
-      }
-      setCallState("speaking");
-      metaText.textContent = "再生中...";
-      for (const bytes of lastReplyAudios) {
-        if (callState !== "speaking") break;
-        await playWavBytes(bytes, "");
-      }
-      setCallState("idle");
-      metaText.textContent = "準備完了";
-    });
 
     function closeSheets() {
       settingsSheet.classList.remove("open");
@@ -1782,7 +1908,6 @@
       historyItems = [];
       hasChatted = false;
       renderChatFeed();
-      replayBtn.style.display = "none";
       lastReplyAudios = [];
       applyCharacterVisual();
       closeSheets();

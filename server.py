@@ -113,6 +113,19 @@ def build_preamble(speaker_id: int) -> str:
     )
 
 
+def _describe_tool_step(su: dict) -> str:
+    raw = json.dumps(su, ensure_ascii=False).lower()
+    if "calendar" in raw:
+        return "予定を登録中..." if ("add" in raw or "create" in raw) else "予定を確認中..."
+    if "gmail" in raw or "mail" in raw or "triage" in raw:
+        return "メールを確認中..."
+    if "ob " in raw or "obsidian" in raw or "obsidian-vault" in raw:
+        return "メモを確認中..."
+    if "notify" in raw or "discord" in raw:
+        return "通知を送信中..."
+    return "情報を確認中..."
+
+
 class PersistentAgySession:
     """agy --input-format stream-json を常駐させ、起動オーバーヘッドを無くす。"""
 
@@ -172,12 +185,12 @@ class PersistentAgySession:
             await self.stop()
             asyncio.create_task(self.start())
 
-    async def ask_deltas(
+    async def ask_events(
         self,
         user_text: str,
         speaker_id: int = DEFAULT_SPEAKER_ID,
         reset: bool = False,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[dict, None]:
         async with self._lock:
             speaker_changed = self.turn_count > 0 and speaker_id != self.active_speaker_id
             if reset or speaker_changed:
@@ -226,10 +239,13 @@ class PersistentAgySession:
                         self.conversation_id = data.get("conversation_id")
                     elif ev == "step_update":
                         su = data.get("step_update", {})
-                        if su.get("step_type") == "agent_response":
+                        st = su.get("step_type")
+                        if st == "tool" and su.get("state") == "ACTIVE":
+                            yield {"type": "progress", "label": _describe_tool_step(su)}
+                        elif st == "agent_response":
                             delta = su.get("text_delta", "")
                             if delta:
-                                yield delta
+                                yield {"type": "text", "text": delta}
                     elif ev == "result":
                         res = data.get("result", {})
                         if res.get("status") != "SUCCESS":
@@ -246,6 +262,16 @@ class PersistentAgySession:
                 if not completed:
                     await self.stop()
                     asyncio.create_task(self.start())
+
+    async def ask_deltas(
+        self,
+        user_text: str,
+        speaker_id: int = DEFAULT_SPEAKER_ID,
+        reset: bool = False,
+    ) -> AsyncGenerator[str, None]:
+        async for ev in self.ask_events(user_text, speaker_id=speaker_id, reset=reset):
+            if ev["type"] == "text":
+                yield ev["text"]
 
     async def ask(
         self,
@@ -340,6 +366,7 @@ class TextChatRequest(BaseModel):
     speaker_id: int = DEFAULT_SPEAKER_ID
     speed_scale: float = 1.12
     reset: bool = False
+    silent: bool = False
 
 
 class SettingsRequest(BaseModel):
@@ -672,6 +699,7 @@ async def _stream_reply_events(
     t0: float,
     t_stt: float,
     reset: bool = False,
+    silent: bool = False,
 ) -> AsyncGenerator[bytes, None]:
     tts_tasks: list[tuple[str, asyncio.Task[bytes]]] = []
     buf = ""
@@ -679,19 +707,33 @@ async def _stream_reply_events(
     t_ai_start = time.perf_counter()
     first_audio_sent = False
     first_audio_sec = 0.0
+    full_reply_parts: list[str] = []
 
     async def flush_sentence(s: str) -> None:
         cleaned = clean_for_speech(s)
-        if cleaned:
-            task = asyncio.create_task(
-                synthesize_voicevox(cleaned, speaker_id, speed_scale)
-            )
-            tts_tasks.append((cleaned, task))
+        if not cleaned:
+            return
+        if silent:
+            full_reply_parts.append(cleaned)
+            return
+        task = asyncio.create_task(
+            synthesize_voicevox(cleaned, speaker_id, speed_scale)
+        )
+        tts_tasks.append((cleaned, task))
 
-    async for delta in agy_session.ask_deltas(
+    async for ev in agy_session.ask_events(
         user_text, speaker_id=speaker_id, reset=reset
     ):
-        buf += delta
+        if ev["type"] == "progress":
+            yield (
+                json.dumps(
+                    {"type": "progress", "label": ev["label"]}, ensure_ascii=False
+                )
+                + "\n"
+            ).encode("utf-8")
+            continue
+
+        buf += ev["text"]
         while True:
             m = split_re.search(buf)
             if not m:
@@ -699,11 +741,24 @@ async def _stream_reply_events(
             end_idx = m.end()
             sentence = buf[:end_idx]
             buf = buf[end_idx:]
+            prev_len = len(full_reply_parts)
             await flush_sentence(sentence)
+            if silent and len(full_reply_parts) > prev_len:
+                if not first_audio_sent:
+                    first_audio_sent = True
+                    first_audio_sec = time.perf_counter() - t0
+                yield (
+                    json.dumps(
+                        {"type": "text", "text": full_reply_parts[-1]},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                ).encode("utf-8")
 
             while tts_tasks and tts_tasks[0][1].done():
                 s_txt, task = tts_tasks.pop(0)
                 wav = await task
+                full_reply_parts.append(s_txt)
                 if not first_audio_sent:
                     first_audio_sent = True
                     first_audio_sec = time.perf_counter() - t0
@@ -720,10 +775,21 @@ async def _stream_reply_events(
                 ).encode("utf-8")
 
     if buf.strip():
+        prev_len = len(full_reply_parts)
         await flush_sentence(buf)
+        if silent and len(full_reply_parts) > prev_len:
+            if not first_audio_sent:
+                first_audio_sent = True
+                first_audio_sec = time.perf_counter() - t0
+            yield (
+                json.dumps(
+                    {"type": "text", "text": full_reply_parts[-1]},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            ).encode("utf-8")
 
     t_ai = time.perf_counter() - t_ai_start
-    full_reply_parts: list[str] = []
 
     for s_txt, task in tts_tasks:
         wav = await task
@@ -777,7 +843,13 @@ async def chat_text_stream(req: TextChatRequest):
         ).encode("utf-8")
         try:
             async for chunk in _stream_reply_events(
-                user_text, req.speaker_id, req.speed_scale, t0, 0.0, reset=req.reset
+                user_text,
+                req.speaker_id,
+                req.speed_scale,
+                t0,
+                0.0,
+                reset=req.reset,
+                silent=req.silent,
             ):
                 yield chunk
         except Exception as exc:
@@ -795,6 +867,7 @@ async def chat_audio_stream(
     speaker_id: int = Form(DEFAULT_SPEAKER_ID),
     speed_scale: float = Form(1.12),
     require_wake: bool = Form(False),
+    silent: bool = Form(False),
 ):
     audio_bytes = await file.read()
     suffix = Path(file.filename or "audio.webm").suffix or ".webm"
@@ -840,7 +913,7 @@ async def chat_audio_stream(
         ).encode("utf-8")
 
         async for chunk in _stream_reply_events(
-            user_text, speaker_id, speed_scale, t0, t_stt
+            user_text, speaker_id, speed_scale, t0, t_stt, silent=silent
         ):
             yield chunk
 
