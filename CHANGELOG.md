@@ -1,31 +1,33 @@
-# Changelog
+# 変更履歴 (Changelog)
 
-All notable changes to VoxMate will be documented in this file.
+VoxMate の主な変更点・リリース内容を記録しています。
 
 ## [0.1.0] - 2026-11-24
 
-Initial public release of **VoxMate** — a cross-platform, multi-device personal voice assistant powered by local Whisper STT, deterministic fast-path routing, pluggable AI backends, and VOICEVOX.
+**VoxMate** の初回パブリックリリースです。ローカル Whisper による音声認識、決定論的ファストパス、差し替え可能な AI バックエンド、VOICEVOX 音声合成を統合したクロスプラットフォーム＆マルチデバイス対応のパーソナル音声アシスタントです。
 
-### Added
-- **Multi-Device Web UI (`static/index.html`)**
-  - Responsive layouts for PC (wide pane + integrated input bar), smartphones, and Echo Show 5 (`788×394` compact floating controls).
-  - Real-time state synchronization across devices (active character, speed, conversation history, timers, and alarm dismissal).
-  - Live character portraits with breathing, blinking, lip-sync, expression switching, and fallback placeholders when portrait assets are not installed.
-  - Minimal empty-state UI on initial launch and after context reset.
-- **Deterministic Fast-Path (`fast_path.py`)**
-  - Sub-second responses without invoking an LLM for clock/date queries, timer/alarm management, and SwitchBot simple ON/OFF commands.
-  - Character-matched polite/casual Japanese endings and unit tests (`tests/test_fast_path.py`).
-- **Timer, Alarm & Volume Separation (`server.py`, `static/index.html`)**
-  - Persistent timer/reminder API (`/api/timers`, `/api/alerts/dismiss`) with background watcher.
-  - Independent **Conversation Volume** and **Alarm Volume** sliders with audio preview on change.
-  - Differentiated playback between one-shot reminders (`reminder`) and looping wake-up alarms (`alarm`) with a large center stop modal synced across all connected devices.
-- **Pluggable AI Backends (`backends/`)**
-  - Unified backend interface selectable via `VOXMATE_BACKEND` (`agy` for persistent Antigravity CLI, `claude` for Claude Code CLI).
-  - Dynamic workspace prompt loading (`VOXMATE.md` and `MEMORY.md` inside `VOXMATE_WORKDIR`).
-- **Cross-Platform STT & Performance**
-  - Automatic dependency selection in `pyproject.toml`: `mlx-whisper` on Apple Silicon macOS, `faster-whisper` on Linux/Windows.
-  - Background STT model warmup on startup and in-memory VOICEVOX TTS caching for short phrases.
-- **Bundled Tools & Templates (`tools/`, `examples/`)**
-  - Generic `sb` (SwitchBot API v1.1 with local device cache) and `timer` CLIs added automatically to `PATH`.
-  - `.env.example`, `examples/VOXMATE.md`, and `examples/secretary-ops-template.md` for calendar, mail, timer, and smart home setup.
-  - Complete `README.md` with setup guides, circular character icon table, screenshots, and animated demo GIF.
+### 追加・実装した主な機能
+
+- **マルチデバイス対応 Web UI (`static/index.html`)**
+  - PC（ワイド画面＋統合入力バー）、スマートフォン、Echo Show 5（`788×394` コンパクト操作UI）にそれぞれ最適化したレイアウトを搭載
+  - キャラクター・話速・会話履歴・タイマー・アラーム停止状態を接続中の全端末でリアルタイム同期
+  - 立ち絵の呼吸・まばたき・リップシンク・表情切替に対応（立ち絵未配置時はキャラクターカラーのプレースホルダーへ自動フォールバック）
+  - テキスト送信・録音送信ともに紙飛行機アイコンへ統一し、初回起動・コンテクストクリア時は吹き出しなしのシンプルな空状態表示を採用
+- **決定論的ファストパス (`fast_path.py`)**
+  - 時刻・日付・曜日の確認、タイマー／アラーム操作、SwitchBot の単純 ON/OFF を LLM を経由せず 0 秒台で即実行・音声返答
+  - キャラクター口調に合わせた自然な日本語語尾（丁寧語・ずんだもん・めたん・つむぎ等）とユニットテスト（`tests/test_fast_path.py`）を整備
+- **タイマー・アラーム・音量分離 (`server.py`, `static/index.html`)**
+  - 永続化対応のタイマー／リマインダー API（`/api/timers`, `/api/alerts/dismiss`）とバックグラウンド監視ループを実装
+  - 「会話音量」と「アラーム音量」の独立スライダー（操作時の試し鳴らし機能付き）を搭載
+  - リマインダー（会話音量で 1 回読み上げ）と目覚ましアラーム（アラーム音量でループ鳴動＋画面中央の大型「停止」モーダル・全端末連動停止）を分離
+  - ヘッダーに動作中タイマーの残り時間バッジと VOICEVOX 未接続警告を表示
+- **差し替え可能な AI バックエンド (`backends/`)**
+  - 環境変数 `VOXMATE_BACKEND` により `agy`（Antigravity CLI 常駐セッション）と `claude`（Claude Code CLI）を切り替え可能
+  - `VOXMATE_WORKDIR` 内の `VOXMATE.md`・`MEMORY.md`・`SOUL.md` を自動読み込みし、個人の記憶や秘書設定を別リポジトリへ安全に分離可能
+- **クロスプラットフォーム対応 ＆ パフォーマンス改善**
+  - `pyproject.toml` の環境マーカーにより、Apple Silicon macOS では `mlx-whisper`、Linux / Windows では `faster-whisper` を自動選択
+  - 起動時の STT バックグラウンドウォームアップと短文 VOICEVOX TTS のインメモリキャッシュを導入
+- **同梱ツール・テンプレート・ドキュメント**
+  - 汎用 `sb`（SwitchBot API v1.1・ローカルキャッシュ付き）および `timer` CLI を `tools/` に同梱し、サーバー起動時に `PATH` へ自動追加
+  - `.env.example`、`examples/VOXMATE.md`、`examples/secretary-ops-template.md`（カレンダー・メール・スマートホーム連携用）を整備
+  - `README.md` にセットアップ手順・対応キャラクター丸アイコン一覧・マルチデバイススクショ・4 シーンデモ GIF を掲載
