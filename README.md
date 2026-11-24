@@ -90,7 +90,7 @@ uv sync
      - Docker 版または各 OS 版 VOICEVOX Engine を起動して `http://127.0.0.1:50021` で待ち受けさせます
      - Docker 例: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:cpu-latest`
 2. **立ち絵素材の配置（任意）**:
-   - スクリーンショットのような立ち絵を表示したい場合は、配布元（[坂本アヒル氏 ニコニコ静画](https://seiga.nicovideo.jp/seiga/im10788496) 等）の利用規約に従って素材を入手し、`static/portraits/` に PNG を配置してください
+   - スクリーンショットのような立ち絵を表示したい場合は、配布元（[坂本アヒル氏 立ち絵素材配布ページ](https://tachie.net/u/3)）の利用規約に従って素材を入手し、`static/portraits/` に PNG を配置してください
    - 命名規則: `<asset>_{idle,speak,blink,happy,think,icon}.png`（例: `zundamon_idle.png`, `zundamon_icon.png`）
 
 > [!TIP]
@@ -164,7 +164,7 @@ SWITCHBOT_SECRET="your_secret"
 
 ## クレジット・権利表記
 
-- **立ち絵イラスト（スクリーンショット内）**: 坂本アヒル 氏（[ニコニコ静画 im10788496](https://seiga.nicovideo.jp/seiga/im10788496) ほか VOICEVOX キャラクター立ち絵素材）
+- **立ち絵イラスト（スクリーンショット内）**: 坂本アヒル 氏（[立ち絵素材配布ページ](https://tachie.net/u/3) ほか VOICEVOX キャラクター立ち絵素材）
   - 各キャラクターの立ち絵素材は、配布元の利用規約に基づき本リポジトリには含めていません。
 - **音声合成**: [VOICEVOX](https://voicevox.hiroshiba.jp/)
   - ずんだもん、四国めたん、春日部つむぎ、雨晴はう、九州そら、WhiteCUL、後鬼、中国うさぎ、東北ずん子、東北イタコ、あんこもん、ブイブイ・コバコ（各キャラクターの利用規約に準拠します）。
