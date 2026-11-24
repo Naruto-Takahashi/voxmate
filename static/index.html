@@ -2023,7 +2023,8 @@
           if (!line.trim()) continue;
           const ev = JSON.parse(line);
           if (ev.type === "empty") {
-            metaText.textContent = prefs.handsfree ? "待機中..." : "聞き取れませんでした";
+            if (prefs.handsfree && callState === "listening") return;
+            metaText.textContent = "聞き取れませんでした";
             setCallState("idle");
             return;
           } else if (ev.type === "woke") {
@@ -2033,19 +2034,15 @@
             metaText.textContent = "どうぞお話しください";
             return;
           } else if (ev.type === "ignored") {
-            setCallState("idle");
-            metaText.textContent = "呼びかけ待ち（キーワード未検出）";
-            setTimeout(() => {
-              if (callState === "listening" && metaText.textContent.startsWith("呼びかけ待ち")) {
-                metaText.textContent = "ハンズフリー待機中";
-              }
-            }, 1600);
+            if (callState !== "listening") setCallState("idle");
             return;
           } else if (ev.type === "error") {
+            if (prefs.handsfree && callState === "listening") return;
             metaText.textContent = "エラー: " + (ev.message || "音声処理に失敗しました");
             setCallState("idle");
             return;
           } else if (ev.type === "stt") {
+            setCallState("thinking");
             hasChatted = true;
             addHistory("user", ev.user_text);
             renderChatFeed("……", true);
@@ -2076,14 +2073,21 @@
       setCallState("idle");
     }
 
+    let wakeCheckBusy = false;
+
     async function sendAudioStream(blob, ext = "webm", requireWake = false) {
-      setCallState("thinking");
-      if (!requireWake) playChime("commit");
+      if (requireWake) {
+        if (wakeCheckBusy) return;
+        wakeCheckBusy = true;
+      } else {
+        setCallState("thinking");
+        playChime("commit");
+        metaText.textContent = "音声処理中...";
+      }
       replyAcc = "";
       lastReplyAudios = [];
       playChain = Promise.resolve();
       abortCtrl = new AbortController();
-      metaText.textContent = requireWake ? "呼びかけ確認中..." : "音声処理中...";
 
       try {
         const fd = new FormData();
@@ -2099,8 +2103,10 @@
         await consumeChatStream(res);
       } catch (err) {
         if (err.name === "AbortError") return;
-        metaText.textContent = "エラー: " + err.message;
+        if (!requireWake) metaText.textContent = "エラー: " + err.message;
         setCallState("idle");
+      } finally {
+        if (requireWake) wakeCheckBusy = false;
       }
     }
 
@@ -2210,7 +2216,7 @@
                 lastVoiceMs = now;
                 speechChunks = preRollChunks.splice(0, preRollChunks.length);
                 preRollSamples = 0;
-                metaText.textContent = "聞き取り中...";
+                if (now <= followUpUntil) metaText.textContent = "聞き取り中...";
               }
             } else {
               consecHot = 0;
@@ -2228,7 +2234,6 @@
               speechChunks = [];
               consecHot = 0;
               if (totalMs < 350) {
-                metaText.textContent = "待機中...";
                 return;
               }
               const wavBlob = encodePcmWav(chunksToSend, sr, 16000);
