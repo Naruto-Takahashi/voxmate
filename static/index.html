@@ -899,6 +899,45 @@
       0%, 100% { box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.4); }
       50% { box-shadow: 0 0 0 14px rgba(255, 92, 92, 0); }
     }
+    .portrait-fallback {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .portrait-fallback.active { display: flex; }
+    .portrait-fallback-orb {
+      width: 112px;
+      height: 112px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      background: radial-gradient(circle at 35% 35%, var(--accent-soft), rgba(15, 20, 28, 0.9));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      box-shadow: 0 0 36px var(--accent-dim);
+    }
+    .portrait-fallback-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .char-icon-fallback {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -951,6 +990,12 @@
       <!-- 右 38%：フルハイト立ち絵 -->
       <section id="rightPane" class="right-pane" aria-label="キャラクター">
         <img id="portraitImg" class="portrait-img" src="/api/character/3/portrait?expr=idle&v=ahiru4" alt="キャラクター立ち絵" />
+        <div id="portraitFallback" class="portrait-fallback">
+          <div class="portrait-fallback-orb">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+          </div>
+          <div id="portraitFallbackName" class="portrait-fallback-name">ずんだもん</div>
+        </div>
       </section>
 
       <!-- Echo Show 5 用コンパクトマイクボタン（左ペイン右下） -->
@@ -1039,6 +1084,8 @@
     };
 
     const portraitImg = document.getElementById("portraitImg");
+    const portraitFallback = document.getElementById("portraitFallback");
+    const portraitFallbackName = document.getElementById("portraitFallbackName");
     const speakerNameEl = document.getElementById("speakerName");
     const speakerStyleEl = document.getElementById("speakerStyle");
     const chatScroll = document.getElementById("chatScroll");
@@ -1231,10 +1278,21 @@
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
+      portraitFallbackName.textContent = sp.name;
+      portraitImg.style.display = "";
+      portraitFallback.classList.remove("active");
       portraitImg.style.opacity = "0";
       setTimeout(() => {
+        portraitImg.onload = () => {
+          portraitImg.style.display = "";
+          portraitFallback.classList.remove("active");
+          portraitImg.style.opacity = "1";
+        };
+        portraitImg.onerror = () => {
+          portraitImg.style.display = "none";
+          portraitFallback.classList.add("active");
+        };
         portraitImg.src = exprUrls.idle;
-        portraitImg.onload = () => { portraitImg.style.opacity = "1"; };
       }, 90);
       renderCharGrid();
       sendWsConfig();
@@ -1243,7 +1301,8 @@
     function renderCharGrid() {
       charGrid.innerHTML = speakersList.map(sp => `
         <button class="char-card ${sp.id === prefs.speakerId ? "selected" : ""}" data-id="${sp.id}">
-          <img src="/api/character/${sp.id}/icon?v=ahiru6" alt="${sp.name}" />
+          <img src="/api/character/${sp.id}/icon?v=ahiru6" alt="${sp.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+          <span class="char-icon-fallback" style="background:${sp.color || '#74D969'}22;color:${sp.color || '#74D969'}">${sp.name.slice(0, 1)}</span>
           <div>
             <div class="char-card-name">${sp.name}</div>
             <div class="char-card-style">${sp.style}</div>

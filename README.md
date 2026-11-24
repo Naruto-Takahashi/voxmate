@@ -74,13 +74,23 @@ uv sync
 
 ### 3. VOICEVOX Engine と立ち絵素材の配置
 
-パブリックリポジトリには再配布不可の立ち絵画像や大容量の VOICEVOX Engine 本体は含めていません。利用前に以下を配置してください。
+> [!IMPORTANT]
+> 本リポジトリには、再配布不可の立ち絵素材および大容量の VOICEVOX Engine 本体は含まれていません。
+> なお、立ち絵画像を配置しなくてもプレースホルダー表示（キャラクターカラーのアイコン枠）へ自動フォールバックするため、**VOICEVOX Engine を用意するだけで動作します**。
 
-1. **VOICEVOX Engine の用意**:
-   - **macOS (arm64)**: `voicevox/macos-arm64/` に [VOICEVOX Engine](https://github.com/VOICEVOX/voicevox_engine/releases) を配置（`./start.sh` が自動起動します）
-   - **Linux / Windows**: Docker 版または各 OS 版 VOICEVOX Engine を起動して `http://127.0.0.1:50021` で待ち受けさせます（例: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:cpu-latest`）
-2. **立ち絵素材の配置**: `static/portraits/` に各キャラクターの立ち絵・アイコン PNG を配置
+1. **VOICEVOX Engine のダウンロードと配置**:
+   - **macOS (arm64)**:
+     1. [VOICEVOX Engine Releases](https://github.com/VOICEVOX/voicevox_engine/releases) から `voicevox_engine-macos-arm64-*.tar.gz`（または `.zip`）をダウンロード
+     2. 解凍したディレクトリの中身（`run` 実行ファイル等）を `voicevox/macos-arm64/` に配置（`./start.sh` が自動起動します）
+   - **Linux / Windows**:
+     - Docker 版または各 OS 版 VOICEVOX Engine を起動して `http://127.0.0.1:50021` で待ち受けさせます
+     - Docker 例: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:cpu-latest`
+2. **立ち絵素材の配置（任意）**:
+   - スクリーンショットのような立ち絵を表示したい場合は、配布元（[坂本アヒル氏 ニコニコ静画](https://seiga.nicovideo.jp/seiga/im10788496) 等）の利用規約に従って素材を入手し、`static/portraits/` に PNG を配置してください
    - 命名規則: `<asset>_{idle,speak,blink,happy,think,icon}.png`（例: `zundamon_idle.png`, `zundamon_icon.png`）
+
+> [!TIP]
+> `static/portraits/` が空の場合でも、右ペインにはキャラクターカラーの音声プレースホルダー、設定一覧にはイニシャルアイコンが表示され、リンク切れにならず利用できます。
 
 ### 4. AI バックエンドの選択と起動
 
