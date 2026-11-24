@@ -2026,9 +2026,20 @@
             metaText.textContent = prefs.handsfree ? "待機中..." : "聞き取れませんでした";
             setCallState("idle");
             return;
-          } else if (ev.type === "ignored") {
-            metaText.textContent = "待機中...";
+          } else if (ev.type === "woke") {
+            playChime("start");
+            followUpUntil = Date.now() + 12000;
             setCallState("idle");
+            metaText.textContent = "どうぞお話しください";
+            return;
+          } else if (ev.type === "ignored") {
+            setCallState("idle");
+            metaText.textContent = "呼びかけ待ち（キーワード未検出）";
+            setTimeout(() => {
+              if (callState === "listening" && metaText.textContent.startsWith("呼びかけ待ち")) {
+                metaText.textContent = "ハンズフリー待機中";
+              }
+            }, 1600);
             return;
           } else if (ev.type === "error") {
             metaText.textContent = "エラー: " + (ev.message || "音声処理に失敗しました");

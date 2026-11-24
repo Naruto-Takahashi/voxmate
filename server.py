@@ -840,13 +840,26 @@ _EXTRA_WAKE_WORDS = [
 ]
 
 
-def matches_wake_word(text: str, speaker_id: int) -> bool:
-    norm = re.sub(r"[\s、。,.!?！？]+", "", text.lower())
+def _wake_words_for(speaker_id: int) -> list[str]:
     sp = _find_speaker(speaker_id)
     words = list(COMMON_WAKE_WORDS) + _EXTRA_WAKE_WORDS
     if sp:
-        words.extend(SPEAKER_WAKE_WORDS.get(sp["name"], []))
-    return any(w.lower() in norm for w in words)
+        words.extend([sp["name"]] + SPEAKER_WAKE_WORDS.get(sp["name"], []))
+    return sorted(set(words), key=len, reverse=True)
+
+
+def matches_wake_word(text: str, speaker_id: int) -> bool:
+    norm = re.sub(r"[\s、。,.!?！？]+", "", text.lower())
+    return any(w.lower() in norm for w in _wake_words_for(speaker_id))
+
+
+def is_wake_only(text: str, speaker_id: int) -> bool:
+    rem = re.sub(r"[\s、。,.!?！？「」『』]+", "", text.lower())
+    for w in _wake_words_for(speaker_id):
+        rem = rem.replace(w.lower(), "")
+    for suffix in ("さん", "ちゃん", "くん", "もん", "たん"):
+        rem = rem.replace(suffix, "")
+    return len(rem) <= 2
 
 
 async def _stream_reply_events(
@@ -1103,6 +1116,15 @@ async def chat_audio_stream(
             yield (
                 json.dumps(
                     {"type": "ignored", "heard": user_text, "stt_sec": round(t_stt, 2)},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+            return
+        if require_wake and is_wake_only(user_text, speaker_id):
+            yield (
+                json.dumps(
+                    {"type": "woke", "heard": user_text, "stt_sec": round(t_stt, 2)},
                     ensure_ascii=False,
                 )
                 + "\n"
