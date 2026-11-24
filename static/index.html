@@ -559,6 +559,53 @@
     }
     .hist-item.user { background: #1D2734; align-self: flex-end; max-width: 90%; }
     .hist-item.ai { background: rgba(255, 255, 255, 0.06); border-left: 3px solid var(--accent); align-self: flex-start; max-width: 95%; }
+
+    /* スマホ縦画面向けレスポンシブ */
+    @media (max-width: 720px) and (orientation: portrait) {
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: 40% 60%;
+      }
+      .right-pane {
+        order: -1;
+        padding: 12px 12px 0;
+      }
+      .left-pane {
+        padding: 10px 16px 68px;
+      }
+      .clock-time {
+        font-size: 26px;
+      }
+      .reply-text {
+        font-size: 17px;
+      }
+      .talk-btn {
+        right: 16px;
+        bottom: 14px;
+        height: 44px;
+      }
+      .sheet {
+        width: min(360px, 100vw);
+      }
+    }
+
+    /* PC・大画面向けカード表示（?preview=1 以外） */
+    @media (min-width: 1000px) and (min-height: 540px) {
+      body:not(.preview-frame) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #070A0F;
+      }
+      body:not(.preview-frame) .device-shell {
+        width: min(1040px, 94vw);
+        height: min(560px, 88vh);
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+        overflow: hidden;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1060,7 +1107,7 @@
       waveBars.forEach(b => b.style.height = "5px");
     }
 
-    async function sendAudioStream(blob) {
+    async function sendAudioStream(blob, ext = "webm") {
       setCallState("thinking");
       playChime("commit");
       replyAcc = "";
@@ -1071,7 +1118,7 @@
 
       try {
         const fd = new FormData();
-        fd.append("file", blob, "voice.webm");
+        fd.append("file", blob, `voice.${ext}`);
         fd.append("speaker_id", String(prefs.speakerId));
         fd.append("speed_scale", String(prefs.speed));
 
@@ -1143,18 +1190,30 @@
           srcNode.connect(micAnalyser);
         }
         recChunks = [];
-        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus" : "audio/webm";
-        const mr = new MediaRecorder(stream, { mimeType });
+        const candidates = [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/mp4",
+          "audio/aac",
+        ];
+        const mimeType = (typeof MediaRecorder.isTypeSupported === "function")
+          ? (candidates.find(t => MediaRecorder.isTypeSupported(t)) || "")
+          : "";
+        const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         mediaRecorder = mr;
         mr.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) recChunks.push(e.data);
         };
         mr.onstop = () => {
           stopMicMeter();
-          const blob = new Blob(recChunks, { type: mimeType });
+          const actualType = mr.mimeType || mimeType || "audio/webm";
+          const ext = actualType.includes("mp4") ? "m4a"
+            : actualType.includes("aac") ? "aac"
+            : actualType.includes("ogg") ? "ogg"
+            : "webm";
+          const blob = new Blob(recChunks, { type: actualType });
           recChunks = [];
-          sendAudioStream(blob);
+          sendAudioStream(blob, ext);
         };
         mr.start(200);
         setCallState("recording");
