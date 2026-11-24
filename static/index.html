@@ -1420,6 +1420,8 @@
       if (callState === "recording") return;
       try {
         unlockAudio();
+        playChime("start");
+        if (isIOS) await new Promise(r => setTimeout(r, 240));
         if (!stream || stream.getAudioTracks().every(t => t.readyState !== "live")) {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -1475,7 +1477,6 @@
         };
         mr.start(isIOS ? 250 : undefined);
         setCallState("recording");
-        if (!isIOS) playChime("start");
         triggerPortraitMotion("anim-nod");
         metaText.textContent = "聞いています...";
         if (micAnalyser) startMicMeter();
