@@ -42,6 +42,8 @@ PC・スマートフォン・Echo Show 5 で会話履歴やアラーム停止を
   - 環境変数 `VOXMATE_BACKEND` で `agy`（Antigravity CLI 常駐セッション）または `claude`（Claude Code CLI）を選択可能
 - **ワークスペース分離 (`VOXMATE_WORKDIR`)**:
   - `VOXMATE.md`・`MEMORY.md`・`SOUL.md` を指定ワークスペースから自動読み込みするため、個人環境を別リポジトリに安全に分離可能
+- **カレンダー・メール・スマートホーム連携（拡張テンプレート同梱）**:
+  - SwitchBot（`sb` CLI による家電・プラグ操作）、Google カレンダー（予定の確認・登録）、メール検索・要約（送信禁止のプロンプトガード付き）のテンプレートを `examples/` に同梱しており、各自の CLI 環境に合わせてすぐ秘書機能を追加可能
 
 ## 構成
 
