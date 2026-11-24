@@ -1136,6 +1136,8 @@
     setInterval(loadHealth, 15000);
     setInterval(syncState, 3000);
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     let audioUnlocked = false;
     const sharedAudioEl = new Audio();
     sharedAudioEl.playsInline = true;
@@ -1163,7 +1165,7 @@
           audioUnlocked = true;
         }
       } catch (_) {}
-      if (!sharedElUnlocked) {
+      if (isIOS && !sharedElUnlocked) {
         sharedElUnlocked = true;
         try {
           sharedAudioEl.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
@@ -1231,6 +1233,34 @@
       unlockAudio();
       currentSentenceHappy = /[！!♪♫嬉楽最高ありがと]/.test(sentenceText);
       if (currentSentenceHappy) triggerPortraitMotion("anim-hop");
+
+      if (!isIOS) {
+        if (!playAnalyser) {
+          playAnalyser = audioCtx.createAnalyser();
+          playAnalyser.fftSize = 256;
+          playAnalyser.connect(audioCtx.destination);
+        }
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume().catch(() => {});
+        }
+        const copy = audioBytes.buffer.slice(audioBytes.byteOffset, audioBytes.byteOffset + audioBytes.byteLength);
+        const audioBuffer = await audioCtx.decodeAudioData(copy);
+        return new Promise((resolve) => {
+          if (callState !== "speaking") { resolve(); return; }
+          const src = audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(playAnalyser);
+          activeSources.push(src);
+          startLipSync();
+          src.onended = () => {
+            activeSources = activeSources.filter(s => s !== src);
+            if (activeSources.length === 0) setExpression("idle");
+            resolve();
+          };
+          src.start(0);
+        });
+      }
+
       const { env, stepSec } = extractWavEnvelope(audioBytes, 30);
       currentRmsEnv = env;
       currentEnvStepSec = stepSec;
@@ -1302,14 +1332,26 @@
 
     function startLipSync() {
       if (lipSyncRaf) cancelAnimationFrame(lipSyncRaf);
+      const buf = (!isIOS && playAnalyser) ? new Uint8Array(playAnalyser.frequencyBinCount) : null;
       let lastLoudAt = 0;
       function tick() {
         if (callState !== "speaking") {
           stopLipSync();
           return;
         }
-        const idx = Math.floor((sharedAudioEl.currentTime || 0) / (currentEnvStepSec || 1 / 30));
-        const rms = currentRmsEnv[idx] || 0;
+        let rms = 0;
+        if (buf && playAnalyser) {
+          playAnalyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const v = (buf[i] - 128) / 128;
+            sum += v * v;
+          }
+          rms = Math.sqrt(sum / buf.length);
+        } else {
+          const idx = Math.floor((sharedAudioEl.currentTime || 0) / (currentEnvStepSec || 1 / 30));
+          rms = currentRmsEnv[idx] || 0;
+        }
         const now = performance.now();
         if (rms > 0.028) {
           lastLoudAt = now;
@@ -1465,8 +1507,6 @@
       }
     }
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     let recStopTimer = null;
     let isTapping = false;
 
