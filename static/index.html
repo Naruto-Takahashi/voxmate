@@ -968,6 +968,17 @@
       opacity: 0.72;
     }
     .meta-badge.warn { color: var(--rec); }
+    .tool-btn.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-color: var(--accent);
+    }
+    body.mode-listening .text-mic-btn {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-dim);
+    }
   </style>
 </head>
 <body>
@@ -983,6 +994,9 @@
             <span id="clockDate" class="clock-date"></span>
           </div>
           <div class="header-tools">
+            <button id="handsfreeBtn" class="tool-btn icon-only" aria-label="ハンズフリー待機" title="ハンズフリー待機（ウェイクワード）">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
+            </button>
             <button id="muteBtn" class="tool-btn icon-only" aria-label="音声オン" title="音声オン/オフ"></button>
             <button id="kbdBtn" class="tool-btn icon-only kbd-toggle" aria-label="文字入力" title="文字入力">⌨</button>
             <button id="settingsBtn" class="tool-btn icon-only" aria-label="メニュー" title="メニュー">
@@ -1134,6 +1148,7 @@
     const rightPane = document.getElementById("rightPane");
     const waveBars = Array.from(document.querySelectorAll(".wave-bar"));
     const muteBtn = document.getElementById("muteBtn");
+    const handsfreeBtn = document.getElementById("handsfreeBtn");
 
     const backdrop = document.getElementById("backdrop");
     const settingsSheet = document.getElementById("settingsSheet");
@@ -1159,7 +1174,26 @@
       alarmVolume: Number(localStorage.getItem("alarmVolume") || 1.0),
       night: localStorage.getItem("night") === "1",
       silent: localStorage.getItem("silent") === "1",
+      handsfree: false,
     };
+
+    function applyHandsfreeUi() {
+      handsfreeBtn.classList.toggle("active", prefs.handsfree);
+      handsfreeBtn.setAttribute(
+        "aria-label",
+        prefs.handsfree ? "ハンズフリー待機中（タップで停止）" : "ハンズフリー待機（ウェイクワード）"
+      );
+    }
+    applyHandsfreeUi();
+    handsfreeBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      unlockAudio();
+      if (prefs.handsfree) {
+        stopHandsfree();
+      } else {
+        await startHandsfree();
+      }
+    });
 
     function applyMuteUi() {
       muteBtn.setAttribute("aria-label", prefs.silent ? "サイレント中（タップで音声オン）" : "音声オン（タップでサイレント）");
@@ -1380,7 +1414,22 @@
     const STOP_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="3"/></svg>`;
     const THINK_SVG = `<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>`;
 
+    let hfActive = false;
+    let hfCooldownUntil = 0;
+    let followUpUntil = 0;
+
+    function isReadyState() {
+      return callState === "idle" || callState === "listening";
+    }
+
     function setCallState(next) {
+      const prev = callState;
+      if (next === "idle" && prefs.handsfree && hfActive) {
+        next = "listening";
+      }
+      if (prev === "speaking" && next !== "speaking") {
+        hfCooldownUntil = Date.now() + 700;
+      }
       callState = next;
       document.body.classList.remove("mode-listening", "mode-recording", "mode-thinking", "mode-speaking");
       if (next !== "idle") document.body.classList.add(`mode-${next}`);
@@ -1399,7 +1448,7 @@
         el.setAttribute("title", aria);
       });
 
-      if (next === "idle") {
+      if (next === "idle" || next === "listening") {
         setExpression("idle");
         waveBars.forEach(b => b.style.height = "5px");
       } else if (next === "recording") {
@@ -1444,7 +1493,7 @@
         const data = await res.json();
         if ((boost && !alarmActive) || !data.audio_base64) return;
         const wavBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
-        if (callState === "idle" && (!boost || alarmActive)) {
+        if (isReadyState() && (!boost || alarmActive)) {
           setCallState("speaking");
           metaText.textContent = boost ? "アラーム再生中..." : "リマインド再生中...";
           await playWavBytes(wavBytes, text, boost);
@@ -1513,7 +1562,7 @@
         speedRange.value = String(prefs.speed);
         speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
       }
-      if (Array.isArray(data.history) && callState === "idle") {
+      if (Array.isArray(data.history) && isReadyState()) {
         const prevLen = historyItems.length;
         const prevLast = historyItems[historyItems.length - 1]?.text;
         historyItems = data.history.slice();
@@ -1579,7 +1628,7 @@
           metaText.classList.add("warn");
         } else {
           metaText.classList.remove("warn");
-          if (callState === "idle" && metaText.textContent === "VOICEVOX 未接続") {
+          if (isReadyState() && metaText.textContent === "VOICEVOX 未接続") {
             metaText.textContent = "準備完了";
           }
         }
@@ -1974,7 +2023,11 @@
           if (!line.trim()) continue;
           const ev = JSON.parse(line);
           if (ev.type === "empty") {
-            metaText.textContent = "聞き取れませんでした";
+            metaText.textContent = prefs.handsfree ? "待機中..." : "聞き取れませんでした";
+            setCallState("idle");
+            return;
+          } else if (ev.type === "ignored") {
+            metaText.textContent = "待機中...";
             setCallState("idle");
             return;
           } else if (ev.type === "error") {
@@ -2000,6 +2053,9 @@
             playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
           } else if (ev.type === "done" && ev.timings) {
             if (replyAcc) addHistory("ai", replyAcc);
+            if (prefs.handsfree && hfActive) {
+              followUpUntil = Date.now() + 12000;
+            }
             metaText.textContent = `応答 ${ev.timings.first_audio}s`;
           }
         }
@@ -2009,20 +2065,21 @@
       setCallState("idle");
     }
 
-    async function sendAudioStream(blob, ext = "webm") {
+    async function sendAudioStream(blob, ext = "webm", requireWake = false) {
       setCallState("thinking");
-      playChime("commit");
+      if (!requireWake) playChime("commit");
       replyAcc = "";
       lastReplyAudios = [];
       playChain = Promise.resolve();
       abortCtrl = new AbortController();
-      metaText.textContent = "音声処理中...";
+      metaText.textContent = requireWake ? "呼びかけ確認中..." : "音声処理中...";
 
       try {
         const fd = new FormData();
         fd.append("file", blob, `voice.${ext}`);
         fd.append("speaker_id", String(prefs.speakerId));
         fd.append("speed_scale", String(prefs.speed));
+        fd.append("require_wake", requireWake ? "true" : "false");
         fd.append("silent", prefs.silent ? "true" : "false");
 
         const res = await fetch("/api/chat/audio/stream", {
@@ -2034,6 +2091,172 @@
         metaText.textContent = "エラー: " + err.message;
         setCallState("idle");
       }
+    }
+
+    function encodePcmWav(chunks, srcRate, targetRate = 16000) {
+      let total = 0;
+      for (const c of chunks) total += c.length;
+      const merged = new Float32Array(total);
+      let off = 0;
+      for (const c of chunks) { merged.set(c, off); off += c.length; }
+
+      const ratio = srcRate / targetRate;
+      const outLen = Math.max(1, Math.floor(merged.length / ratio));
+      const buf = new ArrayBuffer(44 + outLen * 2);
+      const dv = new DataView(buf);
+      const writeStr = (pos, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(pos + i, s.charCodeAt(i)); };
+      writeStr(0, "RIFF");
+      dv.setUint32(4, 36 + outLen * 2, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      dv.setUint32(16, 16, true);
+      dv.setUint16(20, 1, true);
+      dv.setUint16(22, 1, true);
+      dv.setUint32(24, targetRate, true);
+      dv.setUint32(28, targetRate * 2, true);
+      dv.setUint16(32, 2, true);
+      dv.setUint16(34, 16, true);
+      writeStr(36, "data");
+      dv.setUint32(40, outLen * 2, true);
+
+      for (let i = 0; i < outLen; i++) {
+        const idx = i * ratio;
+        const lo = Math.floor(idx);
+        const hi = Math.min(merged.length - 1, lo + 1);
+        const frac = idx - lo;
+        const sample = merged[lo] * (1 - frac) + merged[hi] * frac;
+        const clamped = Math.max(-1, Math.min(1, sample));
+        dv.setInt16(44 + i * 2, clamped < 0 ? clamped * 32768 : clamped * 32767, true);
+      }
+      return new Blob([buf], { type: "audio/wav" });
+    }
+
+    let hfStream = null;
+    let hfSource = null;
+    let hfProc = null;
+    let hfMuteGain = null;
+
+    async function startHandsfree() {
+      if (hfActive) return;
+      try {
+        unlockAudio();
+        if (audioCtx.state === "suspended") await audioCtx.resume().catch(() => {});
+        hfStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+        const sr = audioCtx.sampleRate || 48000;
+        const preRollChunks = [];
+        const maxPreRollSamples = Math.floor(sr * 0.7);
+        let preRollSamples = 0;
+
+        let noiseFloor = 0.008;
+        let consecHot = 0;
+        let speechActive = false;
+        let speechChunks = [];
+        let speechStartMs = 0;
+        let lastVoiceMs = 0;
+
+        hfSource = audioCtx.createMediaStreamSource(hfStream);
+        hfProc = audioCtx.createScriptProcessor(4096, 1, 1);
+        hfMuteGain = audioCtx.createGain();
+        hfMuteGain.gain.value = 0;
+
+        hfProc.onaudioprocess = (ev) => {
+          if (!hfActive || !prefs.handsfree) return;
+          const now = Date.now();
+          // 再生中・処理中・アラーム中・再生直後クールダウンは入力を無視してエコー防止
+          if (callState !== "listening" || alarmActive || now < hfCooldownUntil) {
+            speechActive = false;
+            speechChunks = [];
+            consecHot = 0;
+            preRollChunks.length = 0;
+            preRollSamples = 0;
+            return;
+          }
+
+          const input = ev.inputBuffer.getChannelData(0);
+          let sum = 0;
+          for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+          const rms = Math.sqrt(sum / input.length);
+          const threshold = Math.max(0.014, noiseFloor * 2.8);
+
+          const copy = new Float32Array(input.length);
+          copy.set(input);
+
+          if (!speechActive) {
+            noiseFloor = Math.min(0.035, Math.max(0.004, noiseFloor * 0.94 + rms * 0.06));
+            preRollChunks.push(copy);
+            preRollSamples += copy.length;
+            while (preRollSamples > maxPreRollSamples && preRollChunks.length > 1) {
+              const removed = preRollChunks.shift();
+              preRollSamples -= removed.length;
+            }
+            if (rms >= threshold) {
+              consecHot++;
+              if (consecHot >= 2) {
+                speechActive = true;
+                speechStartMs = now;
+                lastVoiceMs = now;
+                speechChunks = preRollChunks.splice(0, preRollChunks.length);
+                preRollSamples = 0;
+                metaText.textContent = "聞き取り中...";
+              }
+            } else {
+              consecHot = 0;
+            }
+          } else {
+            speechChunks.push(copy);
+            if (rms >= threshold * 0.72) {
+              lastVoiceMs = now;
+            }
+            const silenceMs = now - lastVoiceMs;
+            const totalMs = now - speechStartMs;
+            if (silenceMs >= 1050 || totalMs >= 12000) {
+              const chunksToSend = speechChunks;
+              speechActive = false;
+              speechChunks = [];
+              consecHot = 0;
+              if (totalMs < 350) {
+                metaText.textContent = "待機中...";
+                return;
+              }
+              const wavBlob = encodePcmWav(chunksToSend, sr, 16000);
+              const needWake = now > followUpUntil;
+              sendAudioStream(wavBlob, "wav", needWake);
+            }
+          }
+        };
+
+        hfSource.connect(hfProc);
+        hfProc.connect(hfMuteGain);
+        hfMuteGain.connect(audioCtx.destination);
+
+        prefs.handsfree = true;
+        hfActive = true;
+        applyHandsfreeUi();
+        setCallState("listening");
+        metaText.textContent = "ハンズフリー待機中";
+      } catch (err) {
+        stopHandsfree();
+        metaText.textContent = "マイク許可が必要です";
+      }
+    }
+
+    function stopHandsfree() {
+      prefs.handsfree = false;
+      hfActive = false;
+      followUpUntil = 0;
+      try { if (hfProc) { hfProc.onaudioprocess = null; hfProc.disconnect(); } } catch (_) {}
+      try { if (hfSource) hfSource.disconnect(); } catch (_) {}
+      try { if (hfMuteGain) hfMuteGain.disconnect(); } catch (_) {}
+      try { if (hfStream) hfStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+      hfProc = null;
+      hfSource = null;
+      hfMuteGain = null;
+      hfStream = null;
+      applyHandsfreeUi();
+      if (callState === "listening") setCallState("idle");
+      metaText.textContent = "準備完了";
     }
 
     async function sendTextStream(text) {

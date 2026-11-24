@@ -835,10 +835,15 @@ SPEAKER_WAKE_WORDS = {
 }
 
 
+_EXTRA_WAKE_WORDS = [
+    w.strip() for w in os.environ.get("VOXMATE_WAKE_WORDS", "").split(",") if w.strip()
+]
+
+
 def matches_wake_word(text: str, speaker_id: int) -> bool:
-    norm = text.lower().replace(" ", "").replace("　", "")
+    norm = re.sub(r"[\s、。,.!?！？]+", "", text.lower())
     sp = _find_speaker(speaker_id)
-    words = list(COMMON_WAKE_WORDS)
+    words = list(COMMON_WAKE_WORDS) + _EXTRA_WAKE_WORDS
     if sp:
         words.extend(SPEAKER_WAKE_WORDS.get(sp["name"], []))
     return any(w.lower() in norm for w in words)
