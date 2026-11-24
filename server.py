@@ -558,7 +558,17 @@ async def character_portrait(speaker_id: int, expr: str = "idle"):
         raise HTTPException(status_code=404, detail="Speaker not found")
     asset = sp.get("asset")
     if asset:
-        if expr in ("idle", "blink", "speak", "think", "happy"):
+        if expr in (
+            "idle",
+            "blink",
+            "speak",
+            "think",
+            "happy",
+            "troubled",
+            "surprised",
+            "shy",
+            "angry",
+        ):
             expr_file = CUSTOM_PORTRAIT_DIR / f"{asset}_{expr}.png"
             if expr_file.exists():
                 return FileResponse(

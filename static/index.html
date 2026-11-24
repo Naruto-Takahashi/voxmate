@@ -1231,7 +1231,8 @@
     let lastReplyAudios = [];
     let playChain = Promise.resolve();
     let replyAcc = "";
-    let currentSentenceHappy = false;
+    let currentSentenceExpr = "speak";
+    let exprHoldTimer = null;
     let currentExpr = "idle";
     let exprUrls = { idle: "", blink: "", speak: "", think: "", happy: "" };
     let blinkTimer = null;
@@ -1268,10 +1269,39 @@
       } catch (_) {}
     }
 
-    function setExpression(expr) {
+    function setExpression(expr, keepHold = false) {
+      if (!keepHold && exprHoldTimer) {
+        clearTimeout(exprHoldTimer);
+        exprHoldTimer = null;
+      }
       if (!exprUrls[expr] || currentExpr === expr) return;
       currentExpr = expr;
       portraitImg.src = exprUrls[expr];
+    }
+
+    function holdExpression(expr, durationMs = 1600) {
+      if (exprHoldTimer) {
+        clearTimeout(exprHoldTimer);
+        exprHoldTimer = null;
+      }
+      setExpression(expr, true);
+      exprHoldTimer = setTimeout(() => {
+        exprHoldTimer = null;
+        if (callState === "idle" || callState === "listening") {
+          setExpression("idle", true);
+        }
+      }, durationMs);
+    }
+
+    function pickExpressionForText(text) {
+      const t = String(text || "");
+      if (!t) return "speak";
+      if (/(だめ|ダメ|禁止|コラ|こら|許さ|やめろ|怒|警告)/.test(t)) return "angry";
+      if (/(ありがと|感謝|照れ|てへ|えへ|好き|大好き|はずかし|恥ずかし|褒め|うれし|嬉し)/.test(t)) return "shy";
+      if (/(えっ|えぇ|驚|びっくり|ビックリ|まさか|なんと|アラーム|タイマー|時間です|お知らせ|おおっ)/.test(t)) return "surprised";
+      if (/(ごめん|すみません|申し訳|失敗|エラー|できま|見つかり|わから|分から|困|残念|キャンセル|中止|無理|ないみたい)/.test(t)) return "troubled";
+      if (/[！!♪♫楽最高わーい]/.test(t)) return "happy";
+      return "speak";
     }
 
     function scheduleBlink() {
@@ -1342,11 +1372,15 @@
         renderChatFeed();
       }
       exprUrls = {
-        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru4`,
-        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru4`,
-        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru4`,
-        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru4`,
-        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru4`,
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru5`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru5`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru5`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru5`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru5`,
+        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru5`,
+        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru5`,
+        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru5`,
+        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru5`,
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
@@ -1509,6 +1543,7 @@
       const isReminder = alert && alert.kind === "reminder";
       unlockAudio();
       if (isReminder) {
+        holdExpression("surprised", 1800);
         playChime("start", false);
         if (alert && alert.text) {
           setTimeout(() => { speakAlarmVoice(alert.text, false); }, 350);
@@ -1520,6 +1555,7 @@
       currentAlarmFiredAt = Number((alert && alert.fired_at) || (Date.now() / 1000));
       alarmLabelText.textContent = (alert && alert.label) ? alert.label : "アラーム";
       alarmOverlay.classList.add("active");
+      setExpression("surprised");
       playChime("alarm", true);
       if (alert && alert.text) {
         setTimeout(() => {
@@ -1743,8 +1779,10 @@
 
     async function playWavBytes(audioBytes, sentenceText = "", boostVolume = false) {
       unlockAudio();
-      currentSentenceHappy = /[！!♪♫嬉楽最高ありがと]/.test(sentenceText);
-      if (currentSentenceHappy) triggerPortraitMotion("anim-hop");
+      currentSentenceExpr = pickExpressionForText(sentenceText);
+      if (currentSentenceExpr === "happy" || currentSentenceExpr === "surprised") {
+        triggerPortraitMotion("anim-hop");
+      }
 
       if (!isIOS) {
         if (!playAnalyser) {
@@ -1771,7 +1809,13 @@
           startLipSync();
           src.onended = () => {
             activeSources = activeSources.filter(s => s !== src);
-            if (activeSources.length === 0) setExpression("idle");
+            if (activeSources.length === 0) {
+              if (currentSentenceExpr !== "speak") {
+                holdExpression(currentSentenceExpr, 1500);
+              } else {
+                setExpression("idle");
+              }
+            }
             resolve();
           };
           src.start(0);
@@ -1793,7 +1837,11 @@
           sharedAudioEl.onended = null;
           sharedAudioEl.onerror = null;
           if (currentWavUrl) { URL.revokeObjectURL(currentWavUrl); currentWavUrl = null; }
-          setExpression("idle");
+          if (currentSentenceExpr !== "speak") {
+            holdExpression(currentSentenceExpr, 1500);
+          } else {
+            setExpression("idle");
+          }
           if (playbackResolve === resolve) playbackResolve = null;
           resolve();
         };
@@ -1961,9 +2009,11 @@
         const now = performance.now();
         if (rms > 0.028) {
           lastLoudAt = now;
-          setExpression(currentSentenceHappy ? "happy" : "speak");
+          setExpression(currentSentenceExpr);
         } else if (now - lastLoudAt > 145) {
-          setExpression("idle");
+          if (currentSentenceExpr === "speak" || currentSentenceExpr === "happy") {
+            setExpression("idle");
+          }
         }
         const weights = [0.55, 0.85, 1.0, 0.85, 0.55];
         waveBars.forEach((bar, i) => {
@@ -2525,6 +2575,7 @@
         if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
         metaText.textContent = "キャンセルしました";
         setCallState("idle");
+        holdExpression("troubled", 1600);
       }
     }
 
