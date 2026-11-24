@@ -18,17 +18,14 @@ Echo Show 5・スマートフォン・PC などマルチデバイスでキャラ
 
 設定パネルからワンタップでキャラクター・口調を切り替えられます（選択に応じて AI の口調・テーマカラー・立ち絵も連動します）。
 
-| キャラクター | 対応スタイル | キャラクター | 対応スタイル |
-| :--- | :--- | :--- | :--- |
-| **ずんだもん** | ノーマル / あまあま / ツンツン | **中国うさぎ** | ノーマル / おどろき |
-| **四国めたん** | ノーマル / あまあま / ツンツン | **東北ずん子** | ノーマル |
-| **春日部つむぎ** | ノーマル | **東北イタコ** | ノーマル |
-| **雨晴はう** | ノーマル | **あんこもん** | ノーマル / つよつよ / けだるげ |
-| **九州そら** | ノーマル / あまあま / ツンツン | **ブイブイ・コバコ** | ノーマル |
-| **WhiteCUL** | ノーマル / たのしい | | |
-| **後鬼** | 人間ver. / ぬいぐるみver. | | |
-
-![キャラクター選択一覧](docs/screenshots/characters.png)
+| アイコン | キャラクター | 対応スタイル | アイコン | キャラクター | 対応スタイル |
+| :---: | :--- | :--- | :---: | :--- | :--- |
+| <img src="docs/screenshots/icons/zundamon.png" width="32" alt="ずんだもん" /> | **ずんだもん** | ノーマル / あまあま / ツンツン | <img src="docs/screenshots/icons/goki.png" width="32" alt="後鬼" /> | **後鬼** | 人間ver. / ぬいぐるみver. |
+| <img src="docs/screenshots/icons/metan.png" width="32" alt="四国めたん" /> | **四国めたん** | ノーマル / あまあま / ツンツン | <img src="docs/screenshots/icons/usagi.png" width="32" alt="中国うさぎ" /> | **中国うさぎ** | ノーマル / おどろき |
+| <img src="docs/screenshots/icons/tsumugi.png" width="32" alt="春日部つむぎ" /> | **春日部つむぎ** | ノーマル | <img src="docs/screenshots/icons/zunko.png" width="32" alt="東北ずん子" /> | **東北ずん子** | ノーマル |
+| <img src="docs/screenshots/icons/hau.png" width="32" alt="雨晴はう" /> | **雨晴はう** | ノーマル | <img src="docs/screenshots/icons/itako.png" width="32" alt="東北イタコ" /> | **東北イタコ** | ノーマル |
+| <img src="docs/screenshots/icons/sora.png" width="32" alt="九州そら" /> | **九州そら** | ノーマル / あまあま / ツンツン | <img src="docs/screenshots/icons/ankomon.png" width="32" alt="あんこもん" /> | **あんこもん** | ノーマル / つよつよ / けだるげ |
+| <img src="docs/screenshots/icons/whitecul.png" width="32" alt="WhiteCUL" /> | **WhiteCUL** | ノーマル / たのしい | <img src="docs/screenshots/icons/kobako.png" width="32" alt="ブイブイ・コバコ" /> | **ブイブイ・コバコ** | ノーマル |
 
 ## 主な機能
 
