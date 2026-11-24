@@ -1400,6 +1400,19 @@
       }
     }
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    let recStopTimer = null;
+    let isTapping = false;
+
+    function releaseMicStream() {
+      if (stream) {
+        stream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+        stream = null;
+        micAnalyser = null;
+      }
+    }
+
     async function startRecordingManual() {
       if (callState === "recording") return;
       try {
@@ -1410,7 +1423,7 @@
           });
           micAnalyser = null;
         }
-        if (!micAnalyser) {
+        if (!isIOS && !micAnalyser) {
           const srcNode = audioCtx.createMediaStreamSource(stream);
           micAnalyser = audioCtx.createAnalyser();
           micAnalyser.fftSize = 256;
@@ -1431,13 +1444,18 @@
         mr.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) recChunks.push(e.data);
         };
-        mr.onstop = () => {
+        mr.onerror = () => {
+          if (recStopTimer) { clearTimeout(recStopTimer); recStopTimer = null; }
           stopMicMeter();
-          if (stream) {
-            stream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
-            stream = null;
-            micAnalyser = null;
-          }
+          releaseMicStream();
+          mediaRecorder = null;
+          metaText.textContent = "録音エラー";
+          setCallState("idle");
+        };
+        mr.onstop = () => {
+          if (recStopTimer) { clearTimeout(recStopTimer); recStopTimer = null; }
+          stopMicMeter();
+          releaseMicStream();
           const actualType = mr.mimeType || mimeType || "audio/webm";
           const ext = actualType.includes("mp4") ? "m4a"
             : actualType.includes("aac") ? "aac"
@@ -1452,13 +1470,14 @@
           }
           sendAudioStream(blob, ext);
         };
-        mr.start();
+        mr.start(isIOS ? 250 : undefined);
         setCallState("recording");
-        playChime("start");
+        if (!isIOS) playChime("start");
         triggerPortraitMotion("anim-nod");
         metaText.textContent = "聞いています...";
-        startMicMeter();
+        if (micAnalyser) startMicMeter();
       } catch (err) {
+        releaseMicStream();
         metaText.textContent = "マイクエラー: " + err.message;
         setCallState("idle");
       }
@@ -1467,22 +1486,54 @@
     function stopRecordingManual() {
       if (callState !== "recording" || !mediaRecorder) return;
       stopMicMeter();
-      mediaRecorder.stop();
+      setCallState("thinking");
+      metaText.textContent = "音声処理中...";
+      const mr = mediaRecorder;
       mediaRecorder = null;
+      if (recStopTimer) clearTimeout(recStopTimer);
+      recStopTimer = setTimeout(() => {
+        recStopTimer = null;
+        releaseMicStream();
+        if (callState === "thinking") {
+          metaText.textContent = "音声を取得できませんでした";
+          setCallState("idle");
+        }
+      }, 2000);
+      try {
+        if (mr.state !== "inactive") {
+          try { mr.requestData(); } catch (_) {}
+          mr.stop();
+        } else {
+          if (recStopTimer) { clearTimeout(recStopTimer); recStopTimer = null; }
+          releaseMicStream();
+          setCallState("idle");
+        }
+      } catch (_) {
+        if (recStopTimer) { clearTimeout(recStopTimer); recStopTimer = null; }
+        releaseMicStream();
+        metaText.textContent = "録音停止エラー";
+        setCallState("idle");
+      }
     }
 
     async function handleMainTap() {
-      await unlockAudio().catch(() => {});
-      if (callState === "speaking") {
-        stopPlaybackOnly();
-        await startRecordingManual();
-        return;
-      }
-      if (callState === "thinking") return;
-      if (callState === "recording") {
-        stopRecordingManual();
-      } else {
-        await startRecordingManual();
+      if (isTapping) return;
+      isTapping = true;
+      try {
+        await unlockAudio().catch(() => {});
+        if (callState === "speaking") {
+          stopPlaybackOnly();
+          await startRecordingManual();
+          return;
+        }
+        if (callState === "thinking") return;
+        if (callState === "recording") {
+          stopRecordingManual();
+        } else {
+          await startRecordingManual();
+        }
+      } finally {
+        isTapping = false;
       }
     }
 
