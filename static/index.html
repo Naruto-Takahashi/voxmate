@@ -346,9 +346,9 @@
     .talk-btn:active { transform: scale(0.95); }
 
     body.mode-recording .talk-btn {
-      border-color: var(--rec);
-      background: rgba(255, 92, 92, 0.24);
-      color: var(--rec);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
     }
 
     body.mode-thinking .talk-btn {
@@ -699,9 +699,9 @@
     .text-mic-btn:active { transform: scale(0.94); }
 
     body.mode-recording .text-mic-btn {
-      border-color: var(--rec);
-      background: rgba(255, 92, 92, 0.24);
-      color: var(--rec);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
     }
     body.mode-thinking .text-mic-btn {
       border-color: var(--think);
@@ -1167,6 +1167,7 @@
     speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
 
     const MIC_SVG = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>`;
+    const SEND_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg>`;
     const STOP_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="3"/></svg>`;
     const THINK_SVG = `<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>`;
 
@@ -1175,7 +1176,7 @@
       document.body.classList.remove("mode-listening", "mode-recording", "mode-thinking", "mode-speaking");
       if (next !== "idle") document.body.classList.add(`mode-${next}`);
 
-      const icon = next === "recording" ? STOP_SVG
+      const icon = next === "recording" ? SEND_SVG
         : next === "thinking" ? THINK_SVG
         : next === "speaking" ? STOP_SVG
         : MIC_SVG;
@@ -1186,6 +1187,7 @@
       talkIconSlots.forEach(el => {
         el.innerHTML = icon;
         el.setAttribute("aria-label", aria);
+        el.setAttribute("title", aria);
       });
 
       if (next === "idle") {
