@@ -128,7 +128,7 @@ def build_preamble(speaker_id: int) -> str:
         "音声で読み上げるため、キャラクターの口調を保ったまま1〜3文程度の簡潔で自然な日本語で答えてください。"
         "Markdown記号（*や#や`）や箇条書き記号、URLは使わないでください。"
         "各文の先頭に、その文の感情やポーズを表すタグを `[expr:種類]` 形式で1つだけ付けてください。"
-        "使える種類は `happy`（喜び・手を挙げる）、`shy`（照れ・感謝）、`surprised`（驚き・手を挙げる）、`troubled`（困り・謝罪）、`angry`（怒り・腕組み）、`speak`（通常）の6つです。"
+        "使える種類は `happy`（喜び・手を挙げる）、`shy`（照れ・感謝）、`surprised`（驚き・手を挙げる）、`troubled`（困り・謝罪）、`angry`（怒り・腕組み）、`sad`（しょんぼり・泣き）、`pale`（青ざめ・ショック）、`playful`（お茶目・てへぺろ）、`speak`（通常）の9つです。"
         "例: `[expr:shy]えへへ、ありがとうございます！[expr:happy]これからもよろしくお願いします！`"
         f"{workspace_hint}\n\nユーザーの発言: "
     )
@@ -392,7 +392,7 @@ class SettingsRequest(BaseModel):
 
 
 _EXPR_TAG_RE = re.compile(
-    r"\[(?:expr\s*:\s*)?(happy|shy|surprised|troubled|angry|speak)\]",
+    r"\[(?:expr\s*:\s*)?(happy|shy|surprised|troubled|angry|sad|pale|playful|speak)\]",
     re.IGNORECASE,
 )
 
@@ -586,6 +586,9 @@ async def character_portrait(speaker_id: int, expr: str = "idle"):
             "surprised",
             "shy",
             "angry",
+            "sad",
+            "pale",
+            "playful",
         ):
             expr_file = CUSTOM_PORTRAIT_DIR / f"{asset}_{expr}.png"
             if expr_file.exists():

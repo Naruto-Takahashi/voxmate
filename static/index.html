@@ -1297,9 +1297,12 @@
       const t = String(text || "");
       if (!t) return "speak";
       if (/(だめ|ダメ|禁止|コラッ|こらっ|許さ|やめろ|怒|警告)/.test(t)) return "angry";
+      if (/(悲し|寂し|つら|泣|しょんぼり|がっかり|残念)/.test(t)) return "sad";
+      if (/(ガーン|ショック|青ざめ|やばい|ヤバい|大変|ピンチ|まずい)/.test(t)) return "pale";
+      if (/(てへぺろ|冗談|なんちゃって|ひみつ|秘密|おちゃめ|イタズラ|いたずら|ドヤ)/.test(t)) return "playful";
       if (/(ありがと|感謝|照れ|てへ|えへ|好き|大好き|はずかし|恥ずかし|褒め|うれし|嬉し)/.test(t)) return "shy";
       if (/(えっ|えぇ|驚|びっくり|ビックリ|まさか|なんと！|時間です|お知らせ|おおっ)/.test(t)) return "surprised";
-      if (/(ごめん|すみません|申し訳|失敗|しっぱい|エラー|できませ|できない|出来ませ|出来ない|見つかり|わから|分から|困|残念|キャンセル|中止|無理|ないみたい|お待たせ|難しい|ちょっと待って)/.test(t)) return "troubled";
+      if (/(ごめん|すみません|申し訳|失敗|しっぱい|エラー|できませ|できない|出来ませ|出来ない|見つかり|わから|分から|困|キャンセル|中止|無理|ないみたい|お待たせ|難しい|ちょっと待って)/.test(t)) return "troubled";
       if (/[！!♪♫]|楽し|最高|わーい|おやすみ|おはよう|やった|おめでと|ばっちり|いいです/.test(t)) return "happy";
       return "speak";
     }
@@ -1372,15 +1375,18 @@
         renderChatFeed();
       }
       exprUrls = {
-        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru7`,
-        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru7`,
-        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru7`,
-        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru7`,
-        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru7`,
-        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru7`,
-        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru7`,
-        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru7`,
-        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru7`,
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru8`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru8`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru8`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru8`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru8`,
+        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru8`,
+        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru8`,
+        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru8`,
+        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru8`,
+        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru8`,
+        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru8`,
+        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru8`,
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
@@ -1777,7 +1783,7 @@
       }
     }
 
-    const VALID_SENTENCE_EXPRS = new Set(["speak", "happy", "shy", "surprised", "troubled", "angry"]);
+    const VALID_SENTENCE_EXPRS = new Set(["speak", "happy", "shy", "surprised", "troubled", "angry", "sad", "pale", "playful"]);
 
     async function playWavBytes(audioBytes, sentenceText = "", boostVolume = false, explicitExpr = null) {
       unlockAudio();

@@ -25,7 +25,20 @@ ASSET_DIRS = {
     "kobako": "kobako",
 }
 
-EXPRESSIONS = ("idle", "blink", "speak", "think", "happy", "troubled", "surprised", "shy", "angry")
+EXPRESSIONS = (
+    "idle",
+    "blink",
+    "speak",
+    "think",
+    "happy",
+    "troubled",
+    "surprised",
+    "shy",
+    "angry",
+    "sad",
+    "pale",
+    "playful",
+)
 
 
 def _find_group(psd: PSDImage, keywords: Iterable[str]):
@@ -64,15 +77,24 @@ def _select_only(group, target) -> None:
         c.visible = (c is target)
 
 
-def _set_symbols(psd: PSDImage, want_sweat: bool = False, want_tear: bool = False) -> None:
+def _set_symbols(
+    psd: PSDImage,
+    want_sweat: bool = False,
+    want_tear: bool = False,
+    want_sweat_heavy: bool = False,
+) -> None:
     for layer in psd:
         if layer.is_group() and any(k in layer.name for k in ("汗", "涙", "記号", "なみだ")):
             layer.visible = True
+            has_regular_sweat = any("汗" in c.name and "多め" not in c.name for c in layer)
+            has_regular_tear = any(("涙" in c.name or "なみだ" in c.name) and "滝" not in c.name for c in layer)
             for c in layer:
                 nm = c.name
-                if want_sweat and "汗" in nm and "多め" not in nm:
+                if want_sweat_heavy and "汗多め" in nm:
                     c.visible = True
-                elif want_tear and ("涙" in nm or "なみだ" in nm):
+                elif (want_sweat or (want_sweat_heavy and not has_regular_sweat)) and "汗" in nm and "多め" not in nm:
+                    c.visible = True
+                elif want_tear and ("涙" in nm or "なみだ" in nm) and (not has_regular_tear or "滝" not in nm):
                     c.visible = True
                 elif any(k in nm for k in ("汗", "涙", "なみだ", "非公式", "!B")):
                     c.visible = False
@@ -94,6 +116,7 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
     cheek = _pick_child(cheek_g, ("*ほっぺ基本", "*ほっぺ", "*頬", "*普通", "ほっぺ"), fallback_last=False)
 
     want_sweat = False
+    want_sweat_heavy = False
     want_tear = False
 
     if expr == "idle":
@@ -143,6 +166,26 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
         mouth = _pick_child(mouth_g, ("*むん", "*むすー", "*むくー", "*いー", "*もむー", "*んむ", "*んー"))
         l_arm = _pick_child(l_arm_g, ("*腕組み", "*腰", "*胸元", "*基本", "*普通"))
         r_arm = _pick_child(r_arm_g, ("*指差し横", "*指差す", "*横指差し", "*指さし", "*ゆびさし", "*ゆびたて", "*指立て", "*腰", "*チョップ", "*基本", "*普通"))
+    elif expr == "sad":
+        eye = _pick_child(eye_g, ("*なごみ", "*閉じ目", "*目閉じ", "*閉じ", "*><", "*＞＜", "*基本"))
+        brow = _pick_child(brow_g, ("*困り", "*こまり"))
+        mouth = _pick_child(mouth_g, ("*んゅ", "*むくー", "*うえー", "*うへー", "*うへえー", "*あえ", "*んー", "*んむ", "*む"))
+        r_arm = _pick_child(r_arm_g, ("*胸元", "*ほっぺに手", "*頬に手", "*基本", "*普通"))
+        want_tear = True
+    elif expr == "pale":
+        eye = _pick_child(eye_g, ("*ぐるぐる", "*四白眼", "*三白眼", "*ジト目", "*〇〇", "*◯◯", "*○○", "*なごみ", "*基本"))
+        brow = _pick_child(brow_g, ("*困り", "*こまり"))
+        mouth = _pick_child(mouth_g, ("*うへー", "*うへえー", "*うへぇ", "*ひゅっ", "*むあー", "*うえー", "*△", "*三角", "*んー", "*む"))
+        cheek = _pick_child(cheek_g, ("*青ざめ", "*青め", "縦線", "*クマ", "*くま", "*寝不足", "かげり", "*ほっぺ", "*頬"), fallback_last=False) or cheek
+        r_arm = _pick_child(r_arm_g, ("*頭こつん", "*ほっぺに手", "*頬に手", "*口元", "*手の甲", "*基本", "*普通"))
+        want_sweat_heavy = True
+    elif expr == "playful":
+        eye = _pick_child(eye_g, ("*ウインク", "*にっこり", "*><", "*＞＜", "*うっとり", "*基本"))
+        brow = _pick_child(brow_g, ("*上がり", "*ごきげん", "*困り", "*基本", "*普通"))
+        mouth = _pick_child(mouth_g, ("*ぺろん", "*ぺろり", "*ぺろ", "*にやり", "*にやけ", "*にし", "*ω", "*むふ", "*えへ", "*ちゅわ"))
+        cheek = _pick_child(cheek_g, ("*ほっぺ赤め", "ほっぺ赤め", "*赤面", "*ほっぺ", "*頬", "*普通"), fallback_last=False) or cheek
+        l_arm = _pick_child(l_arm_g, ("*ピース", "*口元に指", "*口元", "*ひそひそ", "*ささやき", "*基本", "*普通"))
+        r_arm = _pick_child(r_arm_g, ("*ピース", "*頭こつん", "*チョップ", "*ぐっ", "*指さし", "*指差す", "*ゆびさし", "*横", "*基本", "*普通"))
     else:
         return
 
@@ -158,7 +201,7 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
             r_arm = None
     if r_arm_g is not None and r_arm is not None:
         _select_only(r_arm_g, r_arm)
-    _set_symbols(psd, want_sweat=want_sweat, want_tear=want_tear)
+    _set_symbols(psd, want_sweat=want_sweat, want_tear=want_tear, want_sweat_heavy=want_sweat_heavy)
 
 
 def extract_character(asset: str, psd_path: Path, out_dir: Path, height: int = 800) -> None:
