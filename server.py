@@ -27,6 +27,7 @@ from scipy import signal
 from silero_vad import get_speech_timestamps, load_silero_vad
 
 from backends import create_backend_session
+from fast_path import try_fast_path
 
 BASE_DIR = Path(__file__).resolve().parent
 CHAT_WORKDIR = Path(
@@ -790,28 +791,114 @@ async def _stream_reply_events(
         )
         tts_tasks.append((cleaned, task))
 
-    async for ev in agy_session.ask_events(
-        user_text, speaker_id=speaker_id, reset=reset
-    ):
-        if ev["type"] == "progress":
+    async def _fast_add_timer(
+        seconds: Optional[int] = None,
+        at: Optional[str] = None,
+        label: str = "タイマー",
+        kind: str = "alarm",
+    ) -> dict:
+        res = await create_timer(
+            TimerCreateRequest(seconds=seconds, at=at, label=label, kind=kind)
+        )
+        return res["timer"]
+
+    def _fast_list_timers() -> list[dict]:
+        now = time.time()
+        return [_timer_public_view(t, now) for t in sorted(active_timers, key=lambda x: x["fire_at"])]
+
+    def _fast_cancel_timers(all_timers: bool = True) -> int:
+        before = len(active_timers)
+        if all_timers:
+            active_timers.clear()
+        removed = before - len(active_timers)
+        if removed > 0:
+            _save_timers()
+            shared_state["state_version"] += 1
+            _save_shared_state()
+        return removed
+
+    fast_reply = await try_fast_path(
+        user_text=user_text,
+        speaker_id=speaker_id,
+        workdir=CHAT_WORKDIR,
+        base_dir=BASE_DIR,
+        timer_ops={
+            "add": _fast_add_timer,
+            "list": _fast_list_timers,
+            "cancel": _fast_cancel_timers,
+        },
+    )
+
+    if fast_reply:
+        prev_len = len(full_reply_parts)
+        await flush_sentence(fast_reply)
+        if silent and len(full_reply_parts) > prev_len:
+            first_audio_sent = True
+            first_audio_sec = time.perf_counter() - t0
             yield (
                 json.dumps(
-                    {"type": "progress", "label": ev["label"]}, ensure_ascii=False
+                    {"type": "text", "text": full_reply_parts[-1]},
+                    ensure_ascii=False,
                 )
                 + "\n"
             ).encode("utf-8")
-            continue
+    else:
+        async for ev in agy_session.ask_events(
+            user_text, speaker_id=speaker_id, reset=reset
+        ):
+            if ev["type"] == "progress":
+                yield (
+                    json.dumps(
+                        {"type": "progress", "label": ev["label"]}, ensure_ascii=False
+                    )
+                    + "\n"
+                ).encode("utf-8")
+                continue
 
-        buf += ev["text"]
-        while True:
-            m = split_re.search(buf)
-            if not m:
-                break
-            end_idx = m.end()
-            sentence = buf[:end_idx]
-            buf = buf[end_idx:]
+            buf += ev["text"]
+            while True:
+                m = split_re.search(buf)
+                if not m:
+                    break
+                end_idx = m.end()
+                sentence = buf[:end_idx]
+                buf = buf[end_idx:]
+                prev_len = len(full_reply_parts)
+                await flush_sentence(sentence)
+                if silent and len(full_reply_parts) > prev_len:
+                    if not first_audio_sent:
+                        first_audio_sent = True
+                        first_audio_sec = time.perf_counter() - t0
+                    yield (
+                        json.dumps(
+                            {"type": "text", "text": full_reply_parts[-1]},
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    ).encode("utf-8")
+
+                while tts_tasks and tts_tasks[0][1].done():
+                    s_txt, task = tts_tasks.pop(0)
+                    wav = await task
+                    full_reply_parts.append(s_txt)
+                    if not first_audio_sent:
+                        first_audio_sent = True
+                        first_audio_sec = time.perf_counter() - t0
+                    yield (
+                        json.dumps(
+                            {
+                                "type": "audio",
+                                "text": s_txt,
+                                "audio_base64": base64.b64encode(wav).decode("ascii"),
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    ).encode("utf-8")
+
+        if buf.strip():
             prev_len = len(full_reply_parts)
-            await flush_sentence(sentence)
+            await flush_sentence(buf)
             if silent and len(full_reply_parts) > prev_len:
                 if not first_audio_sent:
                     first_audio_sent = True
@@ -823,40 +910,6 @@ async def _stream_reply_events(
                     )
                     + "\n"
                 ).encode("utf-8")
-
-            while tts_tasks and tts_tasks[0][1].done():
-                s_txt, task = tts_tasks.pop(0)
-                wav = await task
-                full_reply_parts.append(s_txt)
-                if not first_audio_sent:
-                    first_audio_sent = True
-                    first_audio_sec = time.perf_counter() - t0
-                yield (
-                    json.dumps(
-                        {
-                            "type": "audio",
-                            "text": s_txt,
-                            "audio_base64": base64.b64encode(wav).decode("ascii"),
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                ).encode("utf-8")
-
-    if buf.strip():
-        prev_len = len(full_reply_parts)
-        await flush_sentence(buf)
-        if silent and len(full_reply_parts) > prev_len:
-            if not first_audio_sent:
-                first_audio_sent = True
-                first_audio_sec = time.perf_counter() - t0
-            yield (
-                json.dumps(
-                    {"type": "text", "text": full_reply_parts[-1]},
-                    ensure_ascii=False,
-                )
-                + "\n"
-            ).encode("utf-8")
 
     t_ai = time.perf_counter() - t_ai_start
 
