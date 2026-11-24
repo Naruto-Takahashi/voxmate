@@ -1,38 +1,128 @@
 # VoxMate
 
-Echo Show 5・スマートフォン・PC などマルチデバイスでキャラクター・会話履歴を同期できる、VOICEVOX × mlx-whisper × `agy` 連携の音声対話 Web アプリケーションです。
+Echo Show 5・スマートフォン・PC などマルチデバイスでキャラクター・会話履歴・アラーム停止をリアルタイム同期できる、VOICEVOX × mlx-whisper 連携の音声対話 Web アプリケーションです。
+
+定型操作（時計・タイマー・SwitchBot 単純 ON/OFF）は **決定論的ファストパス（`fast_path.py`）** で LLM を経由せず即答し、複雑な質問や秘書タスクは差し替え可能な AI バックエンド（Antigravity CLI / Claude Code）へ流すハイブリッド構成を採用しています。
 
 ## スクリーンショット
 
-> 以下は Echo Show 5 実機表示比率（`788×394` CSS / `960×480` 物理）におけるサンプル会話画面です。
-
-| ずんだもん | 春日部つむぎ |
+| PC（ワイド画面） | Echo Show 5（`788×394`） |
 | :---: | :---: |
-| ![ずんだもん](docs/screenshots/zundamon.png) | ![春日部つむぎ](docs/screenshots/tsumugi.png) |
+| ![PC](docs/screenshots/pc.png) | ![Echo Show 5](docs/screenshots/echoshow.png) |
 
-| WhiteCUL | 設定画面（キャラクター選択） |
+| スマートフォン（縦画面） | 設定パネル（音量分離・キャラ選択） |
 | :---: | :---: |
-| ![WhiteCUL](docs/screenshots/whitecul.png) | ![設定画面](docs/screenshots/settings.png) |
+| ![Mobile](docs/screenshots/mobile.png) | ![設定画面](docs/screenshots/settings.png) |
+
+## 主な機能
+
+- **マルチデバイス対応 UI**:
+  - **PC**: 統合入力バー（`Enter` で改行、`Cmd/Ctrl + Enter` で送信、紙飛行機送信アイコン）＋ 右側フルハイト立ち絵
+  - **Echo Show 5**: コンパクトなフローティングマイク・キャンセルボタン、大型アラーム停止モーダル
+  - **スマートフォン**: 背景立ち絵＋モバイル最適レイアウト
+- **決定論的ファストパス (`fast_path.py`)**:
+  - 現在時刻・日付、タイマー/アラーム登録・一覧・キャンセル、SwitchBot 単純 ON/OFF を LLM を通さず 0 秒台で即実行・音声返答
+- **目覚まし対応アラーム ＆ 音量分離**:
+  - **会話音量**（普段の会話・操作音・`reminder`）と **アラーム音量**（目覚まし・`alarm`）を独立して設定可能（スライダー操作時の試し鳴らし付き）
+  - アラーム発火時は画面中央に大型「停止」モーダルを表示し、1 台で止めると接続中の全端末で連動停止
+- **差し替え可能な AI バックエンド (`backends/`)**:
+  - 環境変数 `VOXMATE_BACKEND` で `agy`（Antigravity CLI 常駐セッション）または `claude`（Claude Code CLI）を選択可能
+- **ワークスペース分離 (`VOXMATE_WORKDIR`)**:
+  - `VOXMATE.md`・`MEMORY.md`・`SOUL.md` を指定ワークスペースから自動読み込みするため、個人環境を別リポジトリに安全に分離可能
 
 ## 構成
 
-- **STT**: `mlx-whisper` (`mlx-community/whisper-large-v3-turbo-q4`)
-- **LLM**: `agy` (`--input-format stream-json` 常駐セッション)
-- **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`)
-- **UI**: 左ペイン会話テキスト + 右ペイン立ち絵リップシンク（`788×394` / `960×480` 最適化）
+- **STT**: `mlx-whisper` (`mlx-community/whisper-large-v3-turbo-q4`) + Silero VAD
+- **Fast-Path**: `fast_path.py`（時計・タイマー・SwitchBot キャッシュ照合）
+- **LLM バックエンド**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`)
+- **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio API ゲイン制御・リップシンク
 
-## セットアップ（ローカル素材・バイナリの配置）
+---
+
+## セットアップ手順
+
+### 1. 前提環境
+
+- macOS (Apple Silicon 推奨)
+- Python 3.12+ / [`uv`](https://docs.astral.sh/uv/)
+- `ffmpeg` / `jq`（`tools/sb`・`tools/timer` 利用時）
+- AI バックエンド CLI（`agy` または `claude`）
+
+### 2. クローンと依存パッケージの同期
+
+```bash
+git clone https://github.com/Naruto-Takahashi/voxmate.git
+cd voxmate
+uv sync
+```
+
+### 3. VOICEVOX Engine と立ち絵素材の配置
 
 パブリックリポジトリには再配布不可の立ち絵画像や大容量の VOICEVOX Engine 本体は含めていません。利用前に以下を配置してください。
 
-1. `voicevox/macos-arm64/` に VOICEVOX Engine を配置
-2. `static/portraits/` に各キャラクター立ち絵・アイコン PNG（`<asset>_{idle,speak,blink,happy,think,icon}.png`）を配置
-3. 依存パッケージを同期して起動:
+1. `voicevox/macos-arm64/` に [VOICEVOX Engine](https://github.com/VOICEVOX/voicevox_engine/releases)（macOS arm64 版）を配置
+2. `static/portraits/` に各キャラクターの立ち絵・アイコン PNG を配置
+   - 命名規則: `<asset>_{idle,speak,blink,happy,think,icon}.png`（例: `zundamon_idle.png`）
+
+### 4. AI バックエンドの選択と起動
+
+デフォルトは Antigravity CLI（`agy`）です。Claude Code を使う場合は `VOXMATE_BACKEND=claude` を指定して起動します。
 
 ```bash
-uv sync
+# デフォルト（agy）で起動
 ./start.sh
+
+# Claude Code を使う場合
+VOXMATE_BACKEND=claude ./start.sh
 ```
+
+起動後、ブラウザで `http://127.0.0.1:8000` にアクセスしてください。
+
+#### Echo Show 5 / スマートフォンからの接続
+
+- **Echo Show 5（USB デバッグ / adb）**: `start.sh` が `adb reverse tcp:8000 tcp:8000` を自動維持するため、Silk ブラウザから `http://localhost:8000` を開けます。
+- **スマートフォン・他端末**: Tailscale Serve 等で `http://127.0.0.1:8000` を HTTPS 公開してアクセスするとマイク入力が利用できます。
+
+---
+
+## オプション機能のセットアップ
+
+### SwitchBot 連携 (`tools/sb`)
+
+1. `.env`（または `SWITCHBOT_ENV_FILE` で指定したファイル）に SwitchBot API v1.1 の認証情報を記載します（`.env` は Git 管理外にしてください）。
+
+```bash
+SWITCHBOT_TOKEN="your_token"
+SWITCHBOT_SECRET="your_secret"
+```
+
+2. デバイス一覧を取得してキャッシュを作成します。これにより音声・ファストパスから名前で操作できるようになります。
+
+```bash
+./tools/sb devices --refresh
+```
+
+### ワークスペース・秘書機能の拡張 (`VOXMATE.md`)
+
+`VOXMATE_WORKDIR`（デフォルト: `./chat_workspace`）内に `VOXMATE.md` や `MEMORY.md` を置くと、音声会話のシステムプロンプトへ自動的に組み込まれます。
+
+- 汎用プロンプトのテンプレート: [`examples/VOXMATE.md`](examples/VOXMATE.md)
+- カレンダー・メール・タイマー・SwitchBot 連携スキル例: [`examples/secretary-ops-template.md`](examples/secretary-ops-template.md)
+
+### 環境変数一覧
+
+| 変数名 | デフォルト値 | 説明 |
+| :--- | :--- | :--- |
+| `VOXMATE_BACKEND` | `agy` | AI バックエンド（`agy` / `claude`） |
+| `VOXMATE_WORKDIR` | `./chat_workspace` | エージェントの作業ディレクトリ（`VOXMATE.md` 等を配置） |
+| `AGY_MODEL` | `gemini-3.8-flash-low` | `agy` 利用時の初期モデル |
+| `CLAUDE_MODEL` | `""` | `claude` 利用時のモデル指定 |
+| `VOICEVOX_URL` | `http://127.0.0.1:50021` | VOICEVOX Engine の URL |
+| `VOICEVOX_SPEAKER` | `3` | デフォルトキャラクター ID（`3`: ずんだもん） |
+| `SWITCHBOT_ENV_FILE` | `.env` | SwitchBot 認証情報ファイルパス |
+| `SWITCHBOT_CACHE_FILE` | `.cache/switchbot-devices.json` | SwitchBot デバイスキャッシュパス |
+
+---
 
 ## クレジット・権利表記
 
