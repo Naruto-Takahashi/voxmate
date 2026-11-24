@@ -128,6 +128,7 @@ def build_preamble(speaker_id: int) -> str:
         "音声で読み上げるため、キャラクターの口調を保ったまま1〜3文程度の簡潔で自然な日本語で答えてください。"
         "Markdown記号（*や#や`）や箇条書き記号、URLは使わないでください。"
         "各文の先頭に、その文の感情やポーズを表すタグを `[expr:種類]` 形式で1つだけ付けてください。"
+        "通常の落ち着いた返答・説明・相槌には `speak` を使い、本当に感情が動く文にだけ感情タグを選んでください。"
         "使える種類は `happy`（喜び・手を挙げる）、`shy`（照れ・感謝）、`surprised`（驚き・手を挙げる）、`troubled`（困り・謝罪）、`angry`（怒り・腕組み）、`sad`（しょんぼり・泣き）、`pale`（青ざめ・ショック）、`playful`（お茶目・てへぺろ）、`speak`（通常）の9つです。"
         "例: `[expr:shy]えへへ、ありがとうございます！[expr:happy]これからもよろしくお願いします！`"
         f"{workspace_hint}\n\nユーザーの発言: "
@@ -436,6 +437,8 @@ def _extract_lipsync_timeline(query: dict, speed_scale: float) -> list[list]:
         for mora in phrase.get("moras") or []:
             c_len = float(mora.get("consonant_length") or 0.0) / sp
             v_len = float(mora.get("vowel_length") or 0.0) / sp
+            if c_len >= 0.035:
+                push_ev(int(round(t_sec * 1000)), "idle")
             t_sec += c_len
             vowel = str(mora.get("vowel") or "").lower()
             shape = vowel if vowel in ("a", "i", "u", "e", "o") else "idle"
@@ -632,13 +635,21 @@ async def character_portrait(speaker_id: int, expr: str = "idle"):
             "speak_o",
             "think",
             "happy",
+            "happy_c",
             "troubled",
+            "troubled_c",
             "surprised",
+            "surprised_c",
             "shy",
+            "shy_c",
             "angry",
+            "angry_c",
             "sad",
+            "sad_c",
             "pale",
+            "pale_c",
             "playful",
+            "playful_c",
         ):
             expr_file = CUSTOM_PORTRAIT_DIR / f"{asset}_{expr}.png"
             if expr_file.exists():

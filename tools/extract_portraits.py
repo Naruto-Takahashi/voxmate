@@ -36,13 +36,21 @@ EXPRESSIONS = (
     "speak_o",
     "think",
     "happy",
+    "happy_c",
     "troubled",
+    "troubled_c",
     "surprised",
+    "surprised_c",
     "shy",
+    "shy_c",
     "angry",
+    "angry_c",
     "sad",
+    "sad_c",
     "pale",
+    "pale_c",
     "playful",
+    "playful_c",
 )
 
 
@@ -106,6 +114,9 @@ def _set_symbols(
 
 
 def _apply_expression(psd: PSDImage, expr: str) -> None:
+    is_closed = expr.endswith("_c")
+    base_expr = expr[:-2] if is_closed else expr
+
     eye_g = _find_group(psd, ("!目", "目"))
     brow_g = _find_group(psd, ("!眉", "眉", "!まゆ", "まゆ"))
     mouth_g = _find_group(psd, ("!口", "口"))
@@ -124,87 +135,87 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
     want_sweat_heavy = False
     want_tear = False
 
-    if expr == "idle":
+    if base_expr == "idle":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*ほほえみ", "*にこ", "*ん"))
-    elif expr == "blink":
+    elif base_expr == "blink":
         eye = _pick_child(eye_g, ("*閉じ目", "*目閉じ", "*閉じ", "*ーー", "*なごみ", "*にっこり"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*ほほえみ", "*にこ", "*ん"))
-    elif expr == "speak":
+    elif base_expr == "speak":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*わあー", "*あは", "*ほあー", "*ほえあー", "*おわー", "*おおー", "*えあー", "*ほあ", "*おー", "*お"))
-    elif expr == "speak_a":
+    elif base_expr == "speak_a":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*あは", "*わあー", "*わあ", "*わー", "*わはー", "*ほあー", "*ほあ"))
-    elif expr == "speak_i":
+    elif base_expr == "speak_i":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*いー", "*にしー", "*にし", "*えへ", "*えへぇ", "*にへ", "*へへ", "*えあー", "*にへら"))
-    elif expr == "speak_u":
+    elif base_expr == "speak_u":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*ちゅ", "*ゆ", "*んゅ", "*んゆ", "*ほゅ", "*ほう", "*Δ", "*△", "*三角", "*ひゅっ", "*お"))
-    elif expr == "speak_e":
+    elif base_expr == "speak_e":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*え", "*えー", "*ええ", "*えあー", "*んえー", "*ほえ", "*ほあ", "*あえ", "*えへ"))
-    elif expr == "speak_o":
+    elif base_expr == "speak_o":
         eye = _pick_child(eye_g, ("*基本目セット", "*普通目", "*目セット", "*基本a1", "*基本目1", "*基本目", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*お", "*おー", "*おおー", "*おわー", "*おあー", "*ほー", "*ほお", "*ほ"))
-    elif expr == "think":
+    elif base_expr == "think":
         eye = _pick_child(eye_g, ("*上向き目", "*上向き", "*上むき", "*見上げ", "*基本目2", "*目逸らし", "*基本"))
         brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*上がり", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*んー", "*むん", "*んむ", "*ん", "*む", "*三角", "*△"))
         l_arm = _pick_child(l_arm_g, ("*考える", "*あごに指", "*口元に指", "*口元", "*頬に手", "*胸元", "*手のひら", "*基本", "*普通"))
-    elif expr == "happy":
+    elif base_expr == "happy":
         eye = _pick_child(eye_g, ("*にっこり", "*^^", "*><", "*＞＜"))
         brow = _pick_child(brow_g, ("*上がり", "*ごきげん", "*基本", "*普通"))
         mouth = _pick_child(mouth_g, ("*わあー", "*わあ", "*わー", "*あはー", "*あは", "*えへ", "*ほあー", "*ほほえみ"))
         cheek = _pick_child(cheek_g, ("*ほっぺ赤め", "ほっぺ赤め", "*赤面", "*ほっぺ", "*頬", "*普通"), fallback_last=False) or cheek
         r_arm = _pick_child(r_arm_g, ("*手を挙げる", "*ばんざい", "*ぐっ", "*ピース", "*ひろげ", "*腕ひろげる", "*上", "*指立て", "*ゆびたて", "*指さし", "*指差す", "*ゆびさし", "*指差し上", "*基本", "*普通"))
-    elif expr == "troubled":
+    elif base_expr == "troubled":
         eye = _pick_child(eye_g, ("*なごみ", "*><", "*＞＜", "*基本"))
         brow = _pick_child(brow_g, ("*困り", "*こまり"))
         mouth = _pick_child(mouth_g, ("*うへー", "*うへえー", "*うへぇ", "*むくー", "*うえー", "*あえ", "*んー", "*んゅ", "*んむ", "*む"))
         r_arm = _pick_child(r_arm_g, ("*頭こつん", "*ほっぺに手", "*頬に手", "*胸元", "*手の甲", "*基本", "*普通"))
         want_sweat = True
-    elif expr == "surprised":
+    elif base_expr == "surprised":
         eye = _pick_child(eye_g, ("*〇〇", "*◯◯", "*○○", "*見開き", "*上向き目2", "*カメラ目線", "*基本"))
         brow = _pick_child(brow_g, ("*上がり", "*困り", "*基本"))
         mouth = _pick_child(mouth_g, ("*うわー", "*うっわー", "*おおー", "*おわー", "*おあー", "*おー", "*ほえあー", "*お"))
         r_arm = _pick_child(r_arm_g, ("*手を挙げる", "*ばんざい", "*ひろげ", "*腕ひろげる", "*上", "*手をかざす", "*ほっぺに手", "*頬に手", "*横", "*指さし", "*指差し横", "*ゆびさし", "*基本", "*普通"))
-    elif expr == "shy":
+    elif base_expr == "shy":
         eye = _pick_child(eye_g, ("*><", "*＞＜", "*なごみ", "*にっこり", "*うっとり"))
         brow = _pick_child(brow_g, ("*困り", "*こまり", "*上がり", "*基本"))
         mouth = _pick_child(mouth_g, ("*えへ", "*へへ", "*にへ", "*むふ", "*ぺろ", "*ほほえみ"))
         cheek = _pick_child(cheek_g, ("*赤面", "*ほっぺ赤め", "ほっぺ赤め", "*ほっぺ"), fallback_last=False) or cheek
         l_arm = _pick_child(l_arm_g, ("*頬に手", "*口元", "*胸元", "*ひそひそ", "*ささやき", "*手の甲", "*基本", "*普通"))
         r_arm = _pick_child(r_arm_g, ("*ほっぺに手", "*頬に手", "*胸元", "*基本", "*普通"))
-    elif expr == "angry":
+    elif base_expr == "angry":
         eye = _pick_child(eye_g, ("*ジト目", "*三白眼", "*細め目", "*基本目セット", "*普通目", "*目セット", "*基本"))
         brow = _pick_child(brow_g, ("*怒り", "*おこ"))
         mouth = _pick_child(mouth_g, ("*むん", "*むすー", "*むくー", "*いー", "*もむー", "*んむ", "*んー"))
         l_arm = _pick_child(l_arm_g, ("*腕組み", "*腰", "*胸元", "*基本", "*普通"))
         r_arm = _pick_child(r_arm_g, ("*指差し横", "*指差す", "*横指差し", "*指さし", "*ゆびさし", "*ゆびたて", "*指立て", "*腰", "*チョップ", "*基本", "*普通"))
-    elif expr == "sad":
+    elif base_expr == "sad":
         eye = _pick_child(eye_g, ("*なごみ", "*閉じ目", "*目閉じ", "*閉じ", "*><", "*＞＜", "*基本"))
         brow = _pick_child(brow_g, ("*困り", "*こまり"))
         mouth = _pick_child(mouth_g, ("*んゅ", "*むくー", "*うえー", "*うへー", "*うへえー", "*あえ", "*んー", "*んむ", "*む"))
         r_arm = _pick_child(r_arm_g, ("*胸元", "*ほっぺに手", "*頬に手", "*基本", "*普通"))
         want_tear = True
-    elif expr == "pale":
+    elif base_expr == "pale":
         eye = _pick_child(eye_g, ("*ぐるぐる", "*四白眼", "*三白眼", "*ジト目", "*〇〇", "*◯◯", "*○○", "*なごみ", "*基本"))
         brow = _pick_child(brow_g, ("*困り", "*こまり"))
         mouth = _pick_child(mouth_g, ("*うへー", "*うへえー", "*うへぇ", "*ひゅっ", "*むあー", "*うえー", "*△", "*三角", "*んー", "*む"))
         cheek = _pick_child(cheek_g, ("*青ざめ", "*青め", "縦線", "*クマ", "*くま", "*寝不足", "かげり", "*ほっぺ", "*頬"), fallback_last=False) or cheek
         r_arm = _pick_child(r_arm_g, ("*頭こつん", "*ほっぺに手", "*頬に手", "*口元", "*手の甲", "*基本", "*普通"))
         want_sweat_heavy = True
-    elif expr == "playful":
+    elif base_expr == "playful":
         eye = _pick_child(eye_g, ("*ウインク", "*にっこり", "*><", "*＞＜", "*うっとり", "*基本"))
         brow = _pick_child(brow_g, ("*上がり", "*ごきげん", "*困り", "*基本", "*普通"))
         mouth = _pick_child(mouth_g, ("*ぺろん", "*ぺろり", "*ぺろ", "*にやり", "*にやけ", "*にし", "*ω", "*むふ", "*えへ", "*ちゅわ"))
@@ -213,6 +224,9 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
         r_arm = _pick_child(r_arm_g, ("*ピース", "*頭こつん", "*チョップ", "*ぐっ", "*指さし", "*指差す", "*ゆびさし", "*横", "*基本", "*普通"))
     else:
         return
+
+    if is_closed:
+        mouth = _pick_child(mouth_g, ("*ん", "*む", "*んー", "*んゅ", "*ほほえみ", "*にこ")) or mouth
 
     _select_only(eye_g, eye)
     _select_only(brow_g, brow)

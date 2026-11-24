@@ -1435,23 +1435,31 @@
         renderChatFeed();
       }
       exprUrls = {
-        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru10`,
-        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru10`,
-        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru10`,
-        speak_a: `/api/character/${sp.id}/portrait?expr=speak_a&v=ahiru10`,
-        speak_i: `/api/character/${sp.id}/portrait?expr=speak_i&v=ahiru10`,
-        speak_u: `/api/character/${sp.id}/portrait?expr=speak_u&v=ahiru10`,
-        speak_e: `/api/character/${sp.id}/portrait?expr=speak_e&v=ahiru10`,
-        speak_o: `/api/character/${sp.id}/portrait?expr=speak_o&v=ahiru10`,
-        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru10`,
-        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru10`,
-        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru10`,
-        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru10`,
-        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru10`,
-        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru10`,
-        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru10`,
-        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru10`,
-        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru10`,
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru11`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru11`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru11`,
+        speak_a: `/api/character/${sp.id}/portrait?expr=speak_a&v=ahiru11`,
+        speak_i: `/api/character/${sp.id}/portrait?expr=speak_i&v=ahiru11`,
+        speak_u: `/api/character/${sp.id}/portrait?expr=speak_u&v=ahiru11`,
+        speak_e: `/api/character/${sp.id}/portrait?expr=speak_e&v=ahiru11`,
+        speak_o: `/api/character/${sp.id}/portrait?expr=speak_o&v=ahiru11`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru11`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru11`,
+        happy_c: `/api/character/${sp.id}/portrait?expr=happy_c&v=ahiru11`,
+        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru11`,
+        troubled_c: `/api/character/${sp.id}/portrait?expr=troubled_c&v=ahiru11`,
+        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru11`,
+        surprised_c: `/api/character/${sp.id}/portrait?expr=surprised_c&v=ahiru11`,
+        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru11`,
+        shy_c: `/api/character/${sp.id}/portrait?expr=shy_c&v=ahiru11`,
+        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru11`,
+        angry_c: `/api/character/${sp.id}/portrait?expr=angry_c&v=ahiru11`,
+        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru11`,
+        sad_c: `/api/character/${sp.id}/portrait?expr=sad_c&v=ahiru11`,
+        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru11`,
+        pale_c: `/api/character/${sp.id}/portrait?expr=pale_c&v=ahiru11`,
+        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru11`,
+        playful_c: `/api/character/${sp.id}/portrait?expr=playful_c&v=ahiru11`,
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
@@ -1897,7 +1905,8 @@
             activeSources = activeSources.filter(s => s !== src);
             if (activeSources.length === 0) {
               if (currentSentenceExpr !== "speak") {
-                holdExpression(currentSentenceExpr, 1500);
+                const holdTarget = exprUrls[`${currentSentenceExpr}_c`] ? `${currentSentenceExpr}_c` : currentSentenceExpr;
+                holdExpression(holdTarget, 1500);
               } else {
                 setExpression("idle");
               }
@@ -1924,7 +1933,8 @@
           sharedAudioEl.onerror = null;
           if (currentWavUrl) { URL.revokeObjectURL(currentWavUrl); currentWavUrl = null; }
           if (currentSentenceExpr !== "speak") {
-            holdExpression(currentSentenceExpr, 1500);
+            const holdTarget = exprUrls[`${currentSentenceExpr}_c`] ? `${currentSentenceExpr}_c` : currentSentenceExpr;
+            holdExpression(holdTarget, 1500);
           } else {
             setExpression("idle");
           }
@@ -2093,7 +2103,7 @@
           rms = currentRmsEnv[idx] || 0;
         }
         const now = performance.now();
-        if (currentSentenceExpr === "speak" && currentLipsync) {
+        if (currentLipsync) {
           const elapsedMs = (!isIOS && audioCtx)
             ? Math.max(0, (audioCtx.currentTime - currentPlayStartCtxTime) * 1000)
             : Math.max(0, (sharedAudioEl.currentTime || 0) * 1000);
@@ -2105,13 +2115,21 @@
               break;
             }
           }
-          setExpression(shape === "idle" ? "idle" : `speak_${shape}`);
+          if (currentSentenceExpr === "speak") {
+            setExpression(shape === "idle" ? "idle" : `speak_${shape}`);
+          } else {
+            const closedExpr = exprUrls[`${currentSentenceExpr}_c`] ? `${currentSentenceExpr}_c` : currentSentenceExpr;
+            setExpression(shape === "idle" ? closedExpr : currentSentenceExpr);
+          }
         } else if (rms > 0.028) {
           lastLoudAt = now;
           setExpression(currentSentenceExpr);
         } else if (now - lastLoudAt > 145) {
-          if (currentSentenceExpr === "speak" || currentSentenceExpr === "happy") {
+          if (currentSentenceExpr === "speak") {
             setExpression("idle");
+          } else {
+            const closedExpr = exprUrls[`${currentSentenceExpr}_c`] ? `${currentSentenceExpr}_c` : currentSentenceExpr;
+            setExpression(closedExpr);
           }
         }
         const weights = [0.55, 0.85, 1.0, 0.85, 0.55];
