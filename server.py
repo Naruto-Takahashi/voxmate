@@ -200,45 +200,52 @@ class PersistentAgySession:
             )
             await self.proc.stdin.drain()
 
-            while True:
-                raw_line = await self.proc.stdout.readline()
-                if not raw_line:
-                    err = ""
-                    if self.proc.stderr:
-                        err = (await self.proc.stderr.read()).decode(
-                            "utf-8", errors="replace"
+            completed = False
+            try:
+                while True:
+                    raw_line = await self.proc.stdout.readline()
+                    if not raw_line:
+                        err = ""
+                        if self.proc.stderr:
+                            err = (await self.proc.stderr.read()).decode(
+                                "utf-8", errors="replace"
+                            )
+                        await self.stop()
+                        raise RuntimeError(f"agy exited unexpectedly: {err[:300]}")
+
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    ev = data.get("event")
+                    if ev == "init":
+                        self.conversation_id = data.get("conversation_id")
+                    elif ev == "step_update":
+                        su = data.get("step_update", {})
+                        if su.get("step_type") == "agent_response":
+                            delta = su.get("text_delta", "")
+                            if delta:
+                                yield delta
+                    elif ev == "result":
+                        res = data.get("result", {})
+                        if res.get("status") != "SUCCESS":
+                            raise RuntimeError(
+                                f"agy error: {res.get('error', 'unknown error')}"
+                            )
+                        self.conversation_id = (
+                            res.get("conversation_id") or self.conversation_id
                         )
+                        self.turn_count += 1
+                        completed = True
+                        return
+            finally:
+                if not completed:
                     await self.stop()
-                    raise RuntimeError(f"agy exited unexpectedly: {err[:300]}")
-
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                ev = data.get("event")
-                if ev == "init":
-                    self.conversation_id = data.get("conversation_id")
-                elif ev == "step_update":
-                    su = data.get("step_update", {})
-                    if su.get("step_type") == "agent_response":
-                        delta = su.get("text_delta", "")
-                        if delta:
-                            yield delta
-                elif ev == "result":
-                    res = data.get("result", {})
-                    if res.get("status") != "SUCCESS":
-                        raise RuntimeError(
-                            f"agy error: {res.get('error', 'unknown error')}"
-                        )
-                    self.conversation_id = (
-                        res.get("conversation_id") or self.conversation_id
-                    )
-                    self.turn_count += 1
-                    return
+                    asyncio.create_task(self.start())
 
     async def ask(
         self,
