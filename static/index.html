@@ -1083,12 +1083,25 @@
     setInterval(loadHealth, 15000);
     setInterval(syncState, 3000);
 
+    let audioUnlocked = false;
     async function unlockAudio() {
       if (!audioCtx) {
         const Ctx = window.AudioContext || window.webkitAudioContext;
         audioCtx = new Ctx();
       }
-      if (audioCtx.state === "suspended") await audioCtx.resume();
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
+      if (!audioUnlocked && audioCtx.state === "running") {
+        try {
+          const b = audioCtx.createBuffer(1, 1, 22050);
+          const s = audioCtx.createBufferSource();
+          s.buffer = b;
+          s.connect(audioCtx.destination);
+          s.start(0);
+          audioUnlocked = true;
+        } catch (_) {}
+      }
     }
 
     function sendWsConfig() {}
@@ -1362,6 +1375,11 @@
         };
         mr.onstop = () => {
           stopMicMeter();
+          if (stream) {
+            stream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+            stream = null;
+            micAnalyser = null;
+          }
           const actualType = mr.mimeType || mimeType || "audio/webm";
           const ext = actualType.includes("mp4") ? "m4a"
             : actualType.includes("aac") ? "aac"
@@ -1419,6 +1437,7 @@
     });
     textBar.addEventListener("submit", (e) => {
       e.preventDefault();
+      unlockAudio().catch(() => {});
       const val = textInput.value;
       if (!val.trim()) return;
       textInput.value = "";
