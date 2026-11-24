@@ -308,6 +308,7 @@ def _load_shared_state() -> dict:
         "speed_scale": 1.12,
         "history": [],
         "alerts": [],
+        "alarm_dismissed_at": 0.0,
         "state_version": 1,
     }
     if STATE_FILE.exists():
@@ -317,6 +318,7 @@ def _load_shared_state() -> dict:
             default["speed_scale"] = float(loaded.get("speed_scale", 1.12))
             default["history"] = list(loaded.get("history", []))[-30:]
             default["alerts"] = list(loaded.get("alerts", []))[-10:]
+            default["alarm_dismissed_at"] = float(loaded.get("alarm_dismissed_at", 0.0))
         except Exception:
             pass
     return default
@@ -698,6 +700,7 @@ async def get_state():
         "speed_scale": shared_state["speed_scale"],
         "history": shared_state["history"],
         "alerts": shared_state.get("alerts", []),
+        "alarm_dismissed_at": float(shared_state.get("alarm_dismissed_at", 0.0)),
         "timers": [_timer_public_view(t, now) for t in sorted(active_timers, key=lambda x: x["fire_at"])],
         "state_version": shared_state["state_version"],
     }
@@ -724,11 +727,20 @@ async def health():
         "speed_scale": shared_state["speed_scale"],
         "history": shared_state["history"],
         "alerts": shared_state.get("alerts", []),
+        "alarm_dismissed_at": float(shared_state.get("alarm_dismissed_at", 0.0)),
         "timers": [_timer_public_view(t, now) for t in sorted(active_timers, key=lambda x: x["fire_at"])],
         "state_version": shared_state["state_version"],
         "speakers": PRESET_SPEAKERS,
         "models": [{"id": k, "label": v} for k, v in ALLOWED_MODELS.items()],
     }
+
+
+@app.post("/api/alerts/dismiss")
+async def dismiss_alerts():
+    shared_state["alarm_dismissed_at"] = time.time()
+    shared_state["state_version"] += 1
+    _save_shared_state()
+    return {"ok": True, "alarm_dismissed_at": shared_state["alarm_dismissed_at"]}
 
 
 class TimerCreateRequest(BaseModel):
