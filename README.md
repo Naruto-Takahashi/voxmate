@@ -114,6 +114,9 @@ uv run python -m uvicorn server:app --host 127.0.0.1 --port 8000
 - **Echo Show 5（USB デバッグ / adb）**: `start.sh` が `adb reverse tcp:8000 tcp:8000` を自動維持するため、Silk ブラウザから `http://localhost:8000` を開けます。
 - **スマートフォン・他端末**: Tailscale Serve 等で `http://127.0.0.1:8000` を HTTPS 公開してアクセスするとマイク入力が利用できます。
 
+> [!WARNING]
+> 本アプリケーションにはログイン認証機能がありません。`--host 0.0.0.0` で公衆ネットワークや信頼できない LAN に直接公開せず、`127.0.0.1` + Tailscale Serve や `adb reverse` などプライベートな経路でのみ利用してください。
+
 ---
 
 ## オプション機能のセットアップ

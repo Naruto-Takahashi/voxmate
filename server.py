@@ -134,7 +134,7 @@ def _describe_tool_step(su: dict) -> str:
         return "予定を登録中..." if ("add" in raw or "create" in raw) else "予定を確認中..."
     if "gmail" in raw or "mail" in raw or "triage" in raw:
         return "メールを確認中..."
-    if "ob " in raw or "obsidian" in raw or "obsidian-vault" in raw:
+    if "memo" in raw or "note" in raw:
         return "メモを確認中..."
     if "notify" in raw or "discord" in raw:
         return "通知を送信中..."
@@ -334,12 +334,27 @@ def get_vad_model():
     return _vad_model
 
 
+async def _warmup_stt() -> None:
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            wav_path = Path(td) / "warmup.wav"
+            with wave.open(str(wav_path), "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
+                wf.writeframes(b"\x00\x00" * 4800)
+            await asyncio.to_thread(_transcribe_wav_file, wav_path)
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _vv_client
     _vv_client = httpx.AsyncClient(timeout=30.0)
     get_vad_model()
     asyncio.create_task(agy_session.start())
+    asyncio.create_task(_warmup_stt())
     watcher_task = asyncio.create_task(_timer_watcher_loop())
     yield
     watcher_task.cancel()
@@ -378,11 +393,20 @@ def clean_for_speech(text: str) -> str:
     return text
 
 
+_tts_cache: dict[tuple[str, int, float], bytes] = {}
+_TTS_CACHE_MAX = 64
+
+
 async def synthesize_voicevox(
     text: str,
     speaker_id: int = DEFAULT_SPEAKER_ID,
     speed_scale: float = 1.12,
 ) -> bytes:
+    sp_rounded = round(max(0.7, min(1.6, float(speed_scale))), 2)
+    cache_key = (text, int(speaker_id), sp_rounded)
+    if len(text) <= 60 and cache_key in _tts_cache:
+        return _tts_cache[cache_key]
+
     client = _vv_client or httpx.AsyncClient(timeout=30.0)
     q_resp = await client.post(
         f"{VOICEVOX_URL}/audio_query",
@@ -390,7 +414,7 @@ async def synthesize_voicevox(
     )
     q_resp.raise_for_status()
     query = q_resp.json()
-    query["speedScale"] = max(0.7, min(1.6, float(speed_scale)))
+    query["speedScale"] = sp_rounded
 
     s_resp = await client.post(
         f"{VOICEVOX_URL}/synthesis",
@@ -398,7 +422,12 @@ async def synthesize_voicevox(
         json=query,
     )
     s_resp.raise_for_status()
-    return s_resp.content
+    audio = s_resp.content
+    if len(text) <= 60:
+        if len(_tts_cache) >= _TTS_CACHE_MAX:
+            _tts_cache.pop(next(iter(_tts_cache)))
+        _tts_cache[cache_key] = audio
+    return audio
 
 
 _faster_whisper_model = None

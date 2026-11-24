@@ -938,6 +938,27 @@
       font-weight: 700;
       flex-shrink: 0;
     }
+    .meta-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .timer-badge {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(245, 184, 65, 0.45);
+      background: rgba(245, 184, 65, 0.14);
+      color: var(--think);
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .timer-badge.active { display: inline-flex; }
+    .meta-badge.warn { color: var(--rec); }
   </style>
 </head>
 <body>
@@ -971,7 +992,13 @@
               <span id="speakerName" class="speaker-name">ずんだもん</span>
               <span id="speakerStyle" class="speaker-style">ノーマル</span>
             </div>
-            <span id="metaText" class="meta-badge">準備完了</span>
+            <div class="meta-group">
+              <span id="timerBadge" class="timer-badge" aria-label="タイマー残り時間">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span id="timerBadgeText">00:00</span>
+              </span>
+              <span id="metaText" class="meta-badge">準備完了</span>
+            </div>
           </div>
 
           <div id="chatScroll" class="chat-scroll">
@@ -1091,6 +1118,8 @@
     const chatScroll = document.getElementById("chatScroll");
     const chatFeed = document.getElementById("chatFeed");
     const metaText = document.getElementById("metaText");
+    const timerBadge = document.getElementById("timerBadge");
+    const timerBadgeText = document.getElementById("timerBadgeText");
     const talkBtn = document.getElementById("talkBtn");
     const talkIconSlots = Array.from(document.querySelectorAll(".talk-icon-slot"));
     const rightPane = document.getElementById("rightPane");
@@ -1495,8 +1524,34 @@
           triggerTimerAlert(latestNewAlert);
         }
       }
+      if (Array.isArray(data.timers)) {
+        syncedTimers = data.timers.slice();
+        renderTimerBadge();
+      }
       if (needVisual) applyCharacterVisual();
     }
+
+    let syncedTimers = [];
+    function renderTimerBadge() {
+      const nowSec = Date.now() / 1000;
+      const upcoming = syncedTimers
+        .map(t => ({ ...t, rem: Math.max(0, Math.round(Number(t.fire_at || 0) - nowSec)) }))
+        .filter(t => t.rem > 0)
+        .sort((a, b) => a.rem - b.rem);
+      if (upcoming.length === 0) {
+        timerBadge.classList.remove("active");
+        return;
+      }
+      const rem = upcoming[0].rem;
+      const h = Math.floor(rem / 3600);
+      const m = Math.floor((rem % 3600) / 60);
+      const s = rem % 60;
+      timerBadgeText.textContent = h > 0
+        ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+        : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      timerBadge.classList.add("active");
+    }
+    setInterval(renderTimerBadge, 1000);
 
     async function loadHealth() {
       try {
@@ -1509,6 +1564,15 @@
         if (data.models && modelsList.length === 0) {
           modelsList = data.models;
           modelSelect.innerHTML = modelsList.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
+        }
+        if (data.voicevox === false) {
+          metaText.textContent = "VOICEVOX 未接続";
+          metaText.classList.add("warn");
+        } else {
+          metaText.classList.remove("warn");
+          if (callState === "idle" && metaText.textContent === "VOICEVOX 未接続") {
+            metaText.textContent = "準備完了";
+          }
         }
         applySyncedState(data, firstLoad);
       } catch (_) {}
