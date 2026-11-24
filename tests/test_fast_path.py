@@ -55,13 +55,17 @@ class FastPathTests(unittest.TestCase):
         self.assertEqual(added[0]["seconds"], 180)
         self.assertEqual(added[0]["label"], "カップ麺")
         self.assertEqual(added[0]["kind"], "alarm")
-        self.assertTrue(reply.endswith("だよ！"))
+        self.assertTrue(reply.endswith("たよ！"))
 
         reply2, added2, _ = self._run("19時にゴミ出しリマインドして", speaker_id=2)
         self.assertEqual(len(added2), 1)
         self.assertEqual(added2[0]["at"], "19:00")
         self.assertEqual(added2[0]["kind"], "reminder")
-        self.assertTrue(reply2.endswith("ですわ！"))
+        self.assertTrue(reply2.endswith("ましたわ！"))
+
+        reply3, _, _ = self._run("5分後にタイマーかけて", speaker_id=23)
+        self.assertTrue(reply3.endswith("ました！"))
+        self.assertNotIn("したですよ", reply3)
 
     def test_timer_cancel(self):
         reply, _, active = self._run(

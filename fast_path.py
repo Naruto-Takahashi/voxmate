@@ -10,14 +10,24 @@ _METAN_IDS = {2, 0, 6}
 _TSUMUGI_IDS = {8}
 
 
-def _ending(speaker_id: int) -> str:
+def _noun_end(speaker_id: int) -> str:
     if speaker_id in _ZUNDA_IDS:
-        return "のだ！"
+        return "なのだ！"
     if speaker_id in _METAN_IDS:
         return "ですわ！"
     if speaker_id in _TSUMUGI_IDS:
         return "だよ！"
     return "ですよ！"
+
+
+def _past_end(speaker_id: int, stem_plain: str, stem_polite: str) -> str:
+    if speaker_id in _ZUNDA_IDS:
+        return f"{stem_plain}のだ！"
+    if speaker_id in _METAN_IDS:
+        return f"{stem_polite}わ！"
+    if speaker_id in _TSUMUGI_IDS:
+        return f"{stem_plain}よ！"
+    return f"{stem_polite}！"
 
 
 def _normalize(text: str) -> str:
@@ -31,7 +41,7 @@ def _try_clock(text: str, speaker_id: int) -> Optional[str]:
     if any(w in text for w in ("予定", "会議", "ミーティング", "タイマー", "アラーム", "起き", "リマインド")):
         return None
     now = datetime.now().astimezone()
-    end = _ending(speaker_id)
+    end = _noun_end(speaker_id)
     if re.search(r"(今|いま|現在).{0,3}(何時|なんじ|時刻)", text) or text in ("何時", "なんじ", "現在時刻"):
         return f"今は{now.hour}時{now.minute}分{end}"
     if re.search(r"(今日|きょう).{0,3}(何日|なんにち|日付|何曜日|なんようび)", text) or text in ("今日の日付", "何曜日"):
@@ -41,7 +51,7 @@ def _try_clock(text: str, speaker_id: int) -> Optional[str]:
 
 
 async def _try_timer(text: str, speaker_id: int, timer_ops: dict[str, Any]) -> Optional[str]:
-    end = _ending(speaker_id)
+    n_end = _noun_end(speaker_id)
     is_timer_word = any(w in text for w in ("タイマー", "アラーム", "リマインド", "リマインダー", "目覚まし"))
 
     # 一覧確認
@@ -49,22 +59,22 @@ async def _try_timer(text: str, speaker_id: int, timer_ops: dict[str, Any]) -> O
         if not any(w in text for w in ("かけて", "セット", "設定", "登録", "起こして")):
             timers = timer_ops["list"]()
             if not timers:
-                return f"今動いているタイマーはない{end}"
+                return f"今動いているタイマーはない{n_end}"
             parts = []
             for t in timers[:3]:
                 rem = int(t.get("remaining_sec", 0))
                 m, s = divmod(rem, 60)
                 rem_str = f"{m}分{s}秒" if m > 0 and s > 0 else (f"{m}分" if m > 0 else f"{s}秒")
                 parts.append(f"{t['label']}があと{rem_str}")
-            return "、".join(parts) + end
+            return "、".join(parts) + n_end
 
     # キャンセル / 停止
     if is_timer_word and any(w in text for w in ("止め", "とめ", "消し", "けし", "解除", "キャンセル", "削除")):
         if not re.search(r"\d+\s*(秒|分|時間|時)", text):
             removed = timer_ops["cancel"](all_timers=True)
             if removed > 0:
-                return f"タイマーを{removed}件キャンセルした{end}"
-            return f"キャンセルできるタイマーはなかった{end}"
+                return f"タイマーを{removed}件" + _past_end(speaker_id, "キャンセルした", "キャンセルしました")
+            return f"キャンセルできるタイマーはなかった{n_end}"
 
     # 相対時間タイマー（例: 3分後にタイマー、1分30秒後にラーメン教えて）
     rel_m = re.search(
@@ -98,7 +108,7 @@ async def _try_timer(text: str, speaker_id: int, timer_ops: dict[str, Any]) -> O
                 if s_val:
                     dur_parts.append(f"{s_val}秒")
                 dur_str = "".join(dur_parts)
-                return f"{dur_str}後に{label}をセットした{end}"
+                return f"{dur_str}後に{label}を" + _past_end(speaker_id, "セットした", "セットしました")
 
     # 時刻指定アラーム / リマインダー（例: 7時半に起こして、19時にゴミ出しリマインド）
     at_m = re.search(
@@ -123,7 +133,7 @@ async def _try_timer(text: str, speaker_id: int, timer_ops: dict[str, Any]) -> O
             ).strip(" 、。")
             label = label_clean or ("目覚まし" if "起こして" in text else ("リマインド" if kind == "reminder" else "アラーム"))
             await timer_ops["add"](seconds=None, at=at_str, label=label, kind=kind)
-            return f"{hour}時{minute:02d}分に{label}をセットした{end}"
+            return f"{hour}時{minute:02d}分に{label}を" + _past_end(speaker_id, "セットした", "セットしました")
 
     return None
 
@@ -194,9 +204,9 @@ async def _try_switchbot(text: str, speaker_id: int, workdir: Path, base_dir: Pa
     except Exception:
         return None
 
-    end = _ending(speaker_id)
-    action_str = "つけた" if turn_on else "消した"
-    return f"{dev['name']}を{action_str}{end}"
+    plain_verb = "つけた" if turn_on else "消した"
+    polite_verb = "つけました" if turn_on else "消しました"
+    return f"{dev['name']}を" + _past_end(speaker_id, plain_verb, polite_verb)
 
 
 async def try_fast_path(
