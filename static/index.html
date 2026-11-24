@@ -850,8 +850,18 @@
       animation: alarmPulse 1.1s ease-in-out infinite;
     }
     .alarm-banner.active { display: flex; }
+    .alarm-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .alarm-title svg { color: var(--rec); flex-shrink: 0; }
     .alarm-stop-pill {
-      padding: 4px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
       border-radius: 999px;
       background: var(--rec);
       color: #fff;
@@ -898,9 +908,15 @@
             <span id="metaText" class="meta-badge">準備完了</span>
           </div>
 
-          <div id="alarmBanner" class="alarm-banner" role="button" tabindex="0">
-            <span id="alarmBannerText">⏰ アラーム</span>
-            <span class="alarm-stop-pill">タップで停止</span>
+          <div id="alarmBanner" class="alarm-banner" role="button" tabindex="0" aria-label="アラームを停止">
+            <span class="alarm-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <span id="alarmBannerText">アラーム</span>
+            </span>
+            <span class="alarm-stop-pill">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>
+              <span>停止</span>
+            </span>
           </div>
 
           <div id="chatScroll" class="chat-scroll">
@@ -950,7 +966,7 @@
       </div>
 
       <div class="setting-block">
-        <label class="setting-label" for="volRange"><span>会話音量（アラームは常に最大）</span><span id="volVal">50%</span></label>
+        <label class="setting-label" for="volRange"><span>会話音量</span><span id="volVal">50%</span></label>
         <input id="volRange" type="range" min="0.1" max="1.0" step="0.05" value="0.5" />
       </div>
 
@@ -1296,7 +1312,7 @@
     async function triggerTimerAlert(alert) {
       stopAlarm();
       alarmActive = true;
-      alarmBannerText.textContent = `⏰ ${(alert && alert.label) ? alert.label : "アラーム"}`;
+      alarmBannerText.textContent = (alert && alert.label) ? alert.label : "アラーム";
       alarmBanner.classList.add("active");
       unlockAudio();
       playChime("alarm", true);
