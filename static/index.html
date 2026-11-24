@@ -1117,9 +1117,15 @@
         speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
       }
       if (Array.isArray(data.history) && callState === "idle") {
+        const prevLen = historyItems.length;
+        const prevLast = historyItems[historyItems.length - 1]?.text;
         historyItems = data.history.slice();
         hasChatted = historyItems.length > 0;
-        if (!hasChatted) replayBtn.style.display = "none";
+        const hasAi = historyItems.some(h => h.role === "ai");
+        replayBtn.style.display = hasAi ? "inline-flex" : "none";
+        if (historyItems.length !== prevLen || historyItems[historyItems.length - 1]?.text !== prevLast) {
+          lastReplyAudios = [];
+        }
         renderChatFeed();
       }
       if (needVisual) applyCharacterVisual();
@@ -1692,13 +1698,40 @@
     rightPane.addEventListener("click", handleMainTap);
 
     replayBtn.addEventListener("click", async () => {
-      if (lastReplyAudios.length === 0 || callState === "thinking" || callState === "speaking" || callState === "recording") return;
+      if (callState === "thinking" || callState === "speaking" || callState === "recording") return;
+      unlockAudio();
+      const lastAi = [...historyItems].reverse().find(h => h.role === "ai");
+      if (lastReplyAudios.length === 0 && lastAi) {
+        setCallState("thinking");
+        metaText.textContent = "音声生成中...";
+        try {
+          const res = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: lastAi.text,
+              speaker_id: prefs.speakerId,
+              speed_scale: prefs.speed,
+            }),
+          });
+          const data = await res.json();
+          if (data.audio_base64) {
+            lastReplyAudios = [Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0))];
+          }
+        } catch (_) {}
+      }
+      if (lastReplyAudios.length === 0) {
+        setCallState("idle");
+        return;
+      }
       setCallState("speaking");
+      metaText.textContent = "再生中...";
       for (const bytes of lastReplyAudios) {
         if (callState !== "speaking") break;
         await playWavBytes(bytes, "");
       }
       setCallState("idle");
+      metaText.textContent = "準備完了";
     });
 
     function closeSheets() {

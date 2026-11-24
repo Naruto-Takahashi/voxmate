@@ -601,6 +601,17 @@ async def reset_conversation():
     return {"ok": True}
 
 
+@app.post("/api/tts")
+async def synthesize_tts(req: TextChatRequest):
+    cleaned = clean_for_speech(req.text.strip())
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Empty text")
+    wav_bytes = await synthesize_voicevox(
+        cleaned, speaker_id=req.speaker_id, speed_scale=req.speed_scale
+    )
+    return JSONResponse({"audio_base64": base64.b64encode(wav_bytes).decode("ascii")})
+
+
 @app.post("/api/chat/text")
 async def chat_text(req: TextChatRequest):
     if not req.text.strip():
