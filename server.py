@@ -249,6 +249,51 @@ agy_session = PersistentAgySession()
 _vv_client: Optional[httpx.AsyncClient] = None
 _vad_model = None
 
+STATE_FILE = Path(
+    os.environ.get("VOXDESK_STATE_FILE", os.path.expanduser("~/.config/voxdesk/state.json"))
+).expanduser()
+
+
+def _load_shared_state() -> dict:
+    default = {
+        "speaker_id": DEFAULT_SPEAKER_ID,
+        "speed_scale": 1.12,
+        "history": [],
+        "state_version": 1,
+    }
+    if STATE_FILE.exists():
+        try:
+            loaded = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            default["speaker_id"] = int(loaded.get("speaker_id", DEFAULT_SPEAKER_ID))
+            default["speed_scale"] = float(loaded.get("speed_scale", 1.12))
+            default["history"] = list(loaded.get("history", []))[-30:]
+        except Exception:
+            pass
+    return default
+
+
+shared_state = _load_shared_state()
+
+
+def _save_shared_state() -> None:
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(
+            json.dumps(shared_state, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+def _append_shared_history(user_text: str, ai_text: str) -> None:
+    if user_text:
+        shared_state["history"].append({"role": "user", "text": user_text})
+    if ai_text:
+        shared_state["history"].append({"role": "ai", "text": ai_text})
+    shared_state["history"] = shared_state["history"][-30:]
+    shared_state["state_version"] += 1
+    _save_shared_state()
+
 
 def get_vad_model():
     global _vad_model
@@ -282,6 +327,8 @@ class TextChatRequest(BaseModel):
 
 class SettingsRequest(BaseModel):
     agy_model: Optional[str] = None
+    speaker_id: Optional[int] = None
+    speed_scale: Optional[float] = None
 
 
 def clean_for_speech(text: str) -> str:
@@ -487,6 +534,10 @@ async def health():
         "agy_running": bool(agy_session.proc and agy_session.proc.returncode is None),
         "agy_model": agy_session.model,
         "whisper_model": WHISPER_MODEL,
+        "speaker_id": shared_state["speaker_id"],
+        "speed_scale": shared_state["speed_scale"],
+        "history": shared_state["history"],
+        "state_version": shared_state["state_version"],
         "speakers": PRESET_SPEAKERS,
         "models": [{"id": k, "label": v} for k, v in ALLOWED_MODELS.items()],
     }
@@ -494,17 +545,42 @@ async def health():
 
 @app.post("/api/settings")
 async def update_settings(req: SettingsRequest):
+    changed = False
     if req.agy_model is not None:
         if req.agy_model not in ALLOWED_MODELS:
             raise HTTPException(status_code=400, detail="Unsupported model")
         await agy_session.set_model(req.agy_model)
-    return {"ok": True, "agy_model": agy_session.model}
+        changed = True
+    if req.speaker_id is not None:
+        if not _find_speaker(req.speaker_id):
+            raise HTTPException(status_code=400, detail="Unsupported speaker_id")
+        if shared_state["speaker_id"] != req.speaker_id:
+            shared_state["speaker_id"] = req.speaker_id
+            changed = True
+    if req.speed_scale is not None:
+        val = max(0.7, min(1.5, float(req.speed_scale)))
+        if abs(shared_state["speed_scale"] - val) > 1e-4:
+            shared_state["speed_scale"] = val
+            changed = True
+    if changed:
+        shared_state["state_version"] += 1
+        _save_shared_state()
+    return {
+        "ok": True,
+        "agy_model": agy_session.model,
+        "speaker_id": shared_state["speaker_id"],
+        "speed_scale": shared_state["speed_scale"],
+        "state_version": shared_state["state_version"],
+    }
 
 
 @app.post("/api/reset")
 async def reset_conversation():
     await agy_session.stop()
     asyncio.create_task(agy_session.start())
+    shared_state["history"] = []
+    shared_state["state_version"] += 1
+    _save_shared_state()
     return {"ok": True}
 
 
@@ -659,9 +735,11 @@ async def chat_audio_stream(
             await flush_sentence(buf)
 
         t_ai = time.perf_counter() - t_ai_start
+        full_reply_parts: list[str] = []
 
         for s_txt, task in tts_tasks:
             wav = await task
+            full_reply_parts.append(s_txt)
             if not first_audio_sent:
                 first_audio_sent = True
                 first_audio_sec = time.perf_counter() - t0
@@ -676,6 +754,8 @@ async def chat_audio_stream(
                 )
                 + "\n"
             ).encode("utf-8")
+
+        _append_shared_history(user_text, " ".join(full_reply_parts))
 
         yield (
             json.dumps(

@@ -917,6 +917,11 @@
           prefs.speakerId = Number(btn.dataset.id);
           localStorage.setItem("speakerId", String(prefs.speakerId));
           applyCharacterVisual();
+          fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ speaker_id: prefs.speakerId }),
+          }).catch(() => {});
         });
       });
     }
@@ -951,19 +956,59 @@
       }
     }
 
+    let syncedVersion = 0;
     async function loadHealth() {
       try {
         const res = await fetch("/api/health");
         const data = await res.json();
-        if (data.speakers && speakersList.length === 0) {
+        const firstLoad = speakersList.length === 0;
+        if (data.speakers && firstLoad) {
           speakersList = data.speakers;
-          applyCharacterVisual();
         }
         if (data.models && modelsList.length === 0) {
           modelsList = data.models;
           modelSelect.innerHTML = modelsList.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
         }
         if (data.agy_model) modelSelect.value = data.agy_model;
+
+        const ver = Number(data.state_version || 0);
+        if (firstLoad || ver !== syncedVersion) {
+          syncedVersion = ver;
+          let needVisual = firstLoad;
+          if (typeof data.speaker_id === "number" && data.speaker_id !== prefs.speakerId) {
+            prefs.speakerId = data.speaker_id;
+            localStorage.setItem("speakerId", String(prefs.speakerId));
+            needVisual = true;
+          }
+          if (typeof data.speed_scale === "number" && Math.abs(data.speed_scale - prefs.speed) > 1e-3) {
+            prefs.speed = data.speed_scale;
+            localStorage.setItem("speed", String(prefs.speed));
+            speedRange.value = String(prefs.speed);
+            speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
+          }
+          if (Array.isArray(data.history) && callState === "idle") {
+            historyItems = data.history.slice();
+            renderHistory();
+            if (historyItems.length > 0) {
+              const lastAi = [...historyItems].reverse().find(h => h.role === "ai");
+              const lastUser = [...historyItems].reverse().find(h => h.role === "user");
+              if (lastAi) {
+                hasChatted = true;
+                replyText.textContent = lastAi.text;
+              }
+              if (lastUser) {
+                userUtterance.textContent = `あなた「${lastUser.text}」`;
+                userUtterance.classList.add("visible");
+              }
+            } else if (hasChatted) {
+              hasChatted = false;
+              userUtterance.classList.remove("visible");
+              replayBtn.style.display = "none";
+              needVisual = true;
+            }
+          }
+          if (needVisual) applyCharacterVisual();
+        }
       } catch (_) {}
     }
     loadHealth();
@@ -1311,6 +1356,13 @@
       speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
       localStorage.setItem("speed", String(prefs.speed));
       sendWsConfig();
+    });
+    speedRange.addEventListener("change", () => {
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speed_scale: prefs.speed }),
+      }).catch(() => {});
     });
 
     nightToggle.addEventListener("click", () => {
