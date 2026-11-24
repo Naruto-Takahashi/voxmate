@@ -1084,6 +1084,14 @@
     setInterval(syncState, 3000);
 
     let audioUnlocked = false;
+    const sharedAudioEl = new Audio();
+    sharedAudioEl.playsInline = true;
+    let sharedElUnlocked = false;
+    let currentWavUrl = null;
+    let currentRmsEnv = [];
+    let currentEnvStepSec = 1 / 30;
+    let playbackResolve = null;
+
     async function unlockAudio() {
       if (!audioCtx) {
         const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -1102,42 +1110,99 @@
           audioUnlocked = true;
         } catch (_) {}
       }
+      if (!sharedElUnlocked) {
+        try {
+          sharedAudioEl.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+          await sharedAudioEl.play();
+          sharedElUnlocked = true;
+        } catch (_) {}
+      }
     }
 
     function sendWsConfig() {}
 
     function stopPlaybackOnly() {
       if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
+      try { sharedAudioEl.pause(); sharedAudioEl.currentTime = 0; } catch (_) {}
+      if (currentWavUrl) { URL.revokeObjectURL(currentWavUrl); currentWavUrl = null; }
+      if (playbackResolve) { const r = playbackResolve; playbackResolve = null; r(); }
       activeSources.forEach(s => { try { s.stop(); } catch (_) {} });
       activeSources = [];
       playChain = Promise.resolve();
       stopLipSync();
     }
 
+    function extractWavEnvelope(wavBytes, fps = 30) {
+      try {
+        const dv = new DataView(wavBytes.buffer, wavBytes.byteOffset, wavBytes.byteLength);
+        const sampleRate = dv.getUint32(24, true) || 24000;
+        const channels = dv.getUint16(22, true) || 1;
+        // "data" チャンクを探す
+        let off = 12;
+        let dataOff = 44;
+        let dataLen = wavBytes.byteLength - 44;
+        while (off + 8 <= wavBytes.byteLength) {
+          const id = String.fromCharCode(wavBytes[off], wavBytes[off + 1], wavBytes[off + 2], wavBytes[off + 3]);
+          const sz = dv.getUint32(off + 4, true);
+          if (id === "data") {
+            dataOff = off + 8;
+            dataLen = Math.min(sz, wavBytes.byteLength - dataOff);
+            break;
+          }
+          off += 8 + sz + (sz % 2);
+        }
+        const totalSamples = Math.floor(dataLen / (2 * channels));
+        const step = Math.max(1, Math.floor(sampleRate / fps));
+        const env = [];
+        for (let i = 0; i < totalSamples; i += step) {
+          let sum = 0;
+          let cnt = 0;
+          const end = Math.min(totalSamples, i + step);
+          for (let s = i; s < end; s += 4) {
+            const sample = dv.getInt16(dataOff + s * 2 * channels, true) / 32768;
+            sum += sample * sample;
+            cnt++;
+          }
+          env.push(cnt ? Math.sqrt(sum / cnt) : 0);
+        }
+        return { env, stepSec: step / sampleRate };
+      } catch (_) {
+        return { env: [], stepSec: 1 / fps };
+      }
+    }
+
     async function playWavBytes(audioBytes, sentenceText = "") {
       await unlockAudio();
-      if (!playAnalyser) {
-        playAnalyser = audioCtx.createAnalyser();
-        playAnalyser.fftSize = 256;
-        playAnalyser.connect(audioCtx.destination);
-      }
       currentSentenceHappy = /[！!♪♫嬉楽最高ありがと]/.test(sentenceText);
       if (currentSentenceHappy) triggerPortraitMotion("anim-hop");
-      const copy = audioBytes.buffer.slice(audioBytes.byteOffset, audioBytes.byteOffset + audioBytes.byteLength);
-      const audioBuffer = await audioCtx.decodeAudioData(copy);
+      const { env, stepSec } = extractWavEnvelope(audioBytes, 30);
+      currentRmsEnv = env;
+      currentEnvStepSec = stepSec;
+
       return new Promise((resolve) => {
         if (callState !== "speaking") { resolve(); return; }
-        const src = audioCtx.createBufferSource();
-        src.buffer = audioBuffer;
-        src.connect(playAnalyser);
-        activeSources.push(src);
-        startLipSync();
-        src.onended = () => {
-          activeSources = activeSources.filter(s => s !== src);
-          if (activeSources.length === 0) setExpression("idle");
+        if (currentWavUrl) { URL.revokeObjectURL(currentWavUrl); currentWavUrl = null; }
+        const blob = new Blob([audioBytes], { type: "audio/wav" });
+        currentWavUrl = URL.createObjectURL(blob);
+        playbackResolve = resolve;
+
+        const finish = () => {
+          sharedAudioEl.onended = null;
+          sharedAudioEl.onerror = null;
+          if (currentWavUrl) { URL.revokeObjectURL(currentWavUrl); currentWavUrl = null; }
+          setExpression("idle");
+          if (playbackResolve === resolve) playbackResolve = null;
           resolve();
         };
-        src.start(0);
+
+        sharedAudioEl.onended = finish;
+        sharedAudioEl.onerror = finish;
+        sharedAudioEl.src = currentWavUrl;
+        sharedAudioEl.play().then(() => {
+          startLipSync();
+        }).catch(() => {
+          finish();
+        });
       });
     }
 
@@ -1169,22 +1234,15 @@
     }
 
     function startLipSync() {
-      if (!playAnalyser) return;
       if (lipSyncRaf) cancelAnimationFrame(lipSyncRaf);
-      const buf = new Uint8Array(playAnalyser.frequencyBinCount);
       let lastLoudAt = 0;
       function tick() {
         if (callState !== "speaking") {
           stopLipSync();
           return;
         }
-        playAnalyser.getByteTimeDomainData(buf);
-        let sum = 0;
-        for (let i = 0; i < buf.length; i++) {
-          const v = (buf[i] - 128) / 128;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / buf.length);
+        const idx = Math.floor((sharedAudioEl.currentTime || 0) / (currentEnvStepSec || 1 / 30));
+        const rms = currentRmsEnv[idx] || 0;
         const now = performance.now();
         if (rms > 0.028) {
           lastLoudAt = now;
@@ -1193,8 +1251,8 @@
           setExpression("idle");
         }
         const weights = [0.55, 0.85, 1.0, 0.85, 0.55];
-        waveBars.forEach((bar, idx) => {
-          const h = Math.min(20, Math.max(4, Math.round(4 + rms * 140 * weights[idx])));
+        waveBars.forEach((bar, i) => {
+          const h = Math.min(20, Math.max(4, Math.round(4 + rms * 140 * weights[i])));
           bar.style.height = `${h}px`;
         });
         lipSyncRaf = requestAnimationFrame(tick);
