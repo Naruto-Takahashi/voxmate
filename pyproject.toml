@@ -1,15 +1,16 @@
 [project]
 name = "voxmate"
 version = "0.1.0"
-description = "Cross-device voice assistant powered by VOICEVOX, mlx-whisper, and agy"
+description = "Cross-device voice assistant powered by VOICEVOX, Whisper (MLX / faster-whisper), and pluggable AI backends"
 authors = [
     { name = "Naruto-Takahashi", email = "t.naruto7610@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.165.0",
+    "faster-whisper>=1.1.0; sys_platform != 'darwin' or platform_machine != 'arm64'",
     "httpx>=0.28.1",
-    "mlx-whisper>=0.4.3",
+    "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "pillow>=13.0.0",
     "psd-tools>=1.27.0",
     "python-multipart>=0.0.34",

@@ -16,9 +16,18 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 import httpx
-import mlx_whisper
 import numpy as np
 import torch
+
+try:
+    import mlx_whisper
+except ImportError:
+    mlx_whisper = None
+
+try:
+    from faster_whisper import WhisperModel as FasterWhisperModel
+except ImportError:
+    FasterWhisperModel = None
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,11 +47,19 @@ STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 VOICEVOX_URL = os.environ.get("VOICEVOX_URL", "http://127.0.0.1:50021")
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo-q4")
+_DEFAULT_WHISPER = (
+    "mlx-community/whisper-large-v3-turbo-q4" if mlx_whisper is not None else "large-v3-turbo"
+)
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", _DEFAULT_WHISPER)
 DEFAULT_SPEAKER_ID = int(os.environ.get("VOICEVOX_SPEAKER", "3"))
 AGY_BIN = os.environ.get("AGY_BIN", os.path.expanduser("~/.local/bin/agy"))
 
-CHAR_INFO_DIR = BASE_DIR / "voicevox" / "macos-arm64" / "resources" / "character_info"
+CHAR_INFO_DIR = Path(
+    os.environ.get(
+        "VOICEVOX_CHAR_INFO_DIR",
+        str(BASE_DIR / "voicevox" / "macos-arm64" / "resources" / "character_info"),
+    )
+).expanduser()
 CUSTOM_PORTRAIT_DIR = STATIC_DIR / "portraits"
 
 PRESET_SPEAKERS = [
@@ -384,6 +401,48 @@ async def synthesize_voicevox(
     return s_resp.content
 
 
+_faster_whisper_model = None
+
+
+def _get_faster_whisper_model():
+    global _faster_whisper_model
+    if _faster_whisper_model is None:
+        if FasterWhisperModel is None:
+            raise RuntimeError("Neither mlx-whisper nor faster-whisper is installed")
+        device = os.environ.get("FASTER_WHISPER_DEVICE", "auto")
+        compute_type = os.environ.get("FASTER_WHISPER_COMPUTE_TYPE", "auto")
+        _faster_whisper_model = FasterWhisperModel(
+            WHISPER_MODEL, device=device, compute_type=compute_type
+        )
+    return _faster_whisper_model
+
+
+def _transcribe_wav_file(wav_path: Path) -> str:
+    prefer = os.environ.get("VOXMATE_STT", "").strip().lower()
+    use_mlx = (mlx_whisper is not None) and (prefer != "faster-whisper")
+    if use_mlx:
+        result = mlx_whisper.transcribe(
+            str(wav_path),
+            path_or_hf_repo=WHISPER_MODEL,
+            language="ja",
+            initial_prompt="自然な日本語の会話です。",
+            condition_on_previous_text=False,
+            no_speech_threshold=0.6,
+            compression_ratio_threshold=2.2,
+        )
+        return (result.get("text") or "").strip()
+
+    model = _get_faster_whisper_model()
+    segments, _ = model.transcribe(
+        str(wav_path),
+        language="ja",
+        initial_prompt="自然な日本語の会話です。",
+        condition_on_previous_text=False,
+        vad_filter=True,
+    )
+    return "".join(seg.text for seg in segments).strip()
+
+
 def transcribe_audio_bytes(audio_bytes: bytes, suffix: str = ".webm") -> str:
     with tempfile.TemporaryDirectory() as tmpdir:
         in_path = Path(tmpdir) / f"input{suffix}"
@@ -416,16 +475,7 @@ def transcribe_audio_bytes(audio_bytes: bytes, suffix: str = ".webm") -> str:
                 f"ffmpeg error ({suffix}, {len(audio_bytes)}B): {res.stderr.decode('utf-8', errors='replace')[-400:]}"
             )
 
-        result = mlx_whisper.transcribe(
-            str(wav_path),
-            path_or_hf_repo=WHISPER_MODEL,
-            language="ja",
-            initial_prompt="自然な日本語の会話です。",
-            condition_on_previous_text=False,
-            no_speech_threshold=0.6,
-            compression_ratio_threshold=2.2,
-        )
-        text = (result.get("text") or "").strip()
+        text = _transcribe_wav_file(wav_path)
         hallucinations = {
             "ご視聴ありがとうございました",
             "ご視聴ありがとうございました。",

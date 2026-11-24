@@ -32,7 +32,7 @@ Echo Show 5・スマートフォン・PC などマルチデバイスでキャラ
 
 ## 構成
 
-- **STT**: `mlx-whisper` (`mlx-community/whisper-large-v3-turbo-q4`) + Silero VAD
+- **STT**: macOS Apple Silicon は `mlx-whisper`、Linux / Windows は `faster-whisper` を自動選択（`uv sync` で環境に応じて自動インストール） + Silero VAD
 - **Fast-Path**: `fast_path.py`（時計・タイマー・SwitchBot キャッシュ照合）
 - **LLM バックエンド**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`)
 - **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio API ゲイン制御・リップシンク
@@ -43,7 +43,7 @@ Echo Show 5・スマートフォン・PC などマルチデバイスでキャラ
 
 ### 1. 前提環境
 
-- macOS (Apple Silicon 推奨)
+- macOS (Apple Silicon) / Linux / Windows
 - Python 3.12+ / [`uv`](https://docs.astral.sh/uv/)
 - `ffmpeg` / `jq`（`tools/sb`・`tools/timer` 利用時）
 - AI バックエンド CLI（`agy` または `claude`）
@@ -60,20 +60,25 @@ uv sync
 
 パブリックリポジトリには再配布不可の立ち絵画像や大容量の VOICEVOX Engine 本体は含めていません。利用前に以下を配置してください。
 
-1. `voicevox/macos-arm64/` に [VOICEVOX Engine](https://github.com/VOICEVOX/voicevox_engine/releases)（macOS arm64 版）を配置
-2. `static/portraits/` に各キャラクターの立ち絵・アイコン PNG を配置
-   - 命名規則: `<asset>_{idle,speak,blink,happy,think,icon}.png`（例: `zundamon_idle.png`）
+1. **VOICEVOX Engine の用意**:
+   - **macOS (arm64)**: `voicevox/macos-arm64/` に [VOICEVOX Engine](https://github.com/VOICEVOX/voicevox_engine/releases) を配置（`./start.sh` が自動起動します）
+   - **Linux / Windows**: Docker 版または各 OS 版 VOICEVOX Engine を起動して `http://127.0.0.1:50021` で待ち受けさせます（例: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:cpu-latest`）
+2. **立ち絵素材の配置**: `static/portraits/` に各キャラクターの立ち絵・アイコン PNG を配置
+   - 命名規則: `<asset>_{idle,speak,blink,happy,think,icon}.png`（例: `zundamon_idle.png`, `zundamon_icon.png`）
 
 ### 4. AI バックエンドの選択と起動
 
 デフォルトは Antigravity CLI（`agy`）です。Claude Code を使う場合は `VOXMATE_BACKEND=claude` を指定して起動します。
 
 ```bash
-# デフォルト（agy）で起動
+# macOS（VOICEVOX Engine + VoxMate を一括起動）
 ./start.sh
 
-# Claude Code を使う場合
+# Claude Code を使う場合（macOS）
 VOXMATE_BACKEND=claude ./start.sh
+
+# Linux / Windows（外部で VOICEVOX Engine を起動済みの状態でサーバーを起動）
+uv run python -m uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8000` にアクセスしてください。
