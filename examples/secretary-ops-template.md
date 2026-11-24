@@ -19,28 +19,28 @@ description: 音声アシスタント向け汎用スキルテンプレート（�
 
 ## 3. タイマー・リマインダー操作
 
-VoxMate 本体の API を `tools/timer` から操作できます：
+VoxMate 本体の API を `timer` コマンド（サーバー起動時に `PATH` へ自動追加）から操作できます：
 
 ```bash
 # アラーム / タイマー（アラーム音量でループ通知）
-tools/timer add --sec 180 --label "カップ麺" --kind alarm
-tools/timer add --at "07:30" --label "目覚まし" --kind alarm
+timer add --sec 180 --label "カップ麺" --kind alarm
+timer add --at "07:30" --label "目覚まし" --kind alarm
 
 # リマインダー（会話音量で1回読み上げ）
-tools/timer add --at "19:00" --label "ゴミ出し" --kind reminder
+timer add --at "19:00" --label "ゴミ出し" --kind reminder
 
 # 一覧・キャンセル
-tools/timer list
-tools/timer cancel <id|ラベル|all>
+timer list
+timer cancel <id|ラベル|all>
 ```
 
 ## 4. SwitchBot 家電・プラグ操作
 
-`SWITCHBOT_TOKEN` と `SWITCHBOT_SECRET` を `.env` に設定すると `tools/sb` で操作できます：
+`SWITCHBOT_TOKEN` と `SWITCHBOT_SECRET` を `.env` に設定すると `sb` コマンドで操作できます：
 
 ```bash
-tools/sb devices
-tools/sb status <デバイス名またはID>
-tools/sb cmd <デバイス名またはID> turnOn
-tools/sb cmd <デバイス名またはID> turnOff
+sb devices
+sb status <デバイス名またはID>
+sb cmd <デバイス名またはID> turnOn
+sb cmd <デバイス名またはID> turnOff
 ```

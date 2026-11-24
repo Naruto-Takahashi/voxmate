@@ -39,6 +39,9 @@ from backends import create_backend_session
 from fast_path import try_fast_path
 
 BASE_DIR = Path(__file__).resolve().parent
+TOOLS_DIR = BASE_DIR / "tools"
+if TOOLS_DIR.is_dir():
+    os.environ["PATH"] = f"{TOOLS_DIR}{os.pathsep}{os.environ.get('PATH', '')}"
 CHAT_WORKDIR = Path(
     os.environ.get("VOXMATE_WORKDIR", str(BASE_DIR / "chat_workspace"))
 ).expanduser()
