@@ -103,7 +103,7 @@ def build_preamble(speaker_id: int) -> str:
             "- Obsidianメモ/今日の日誌: `ob memo \"<内容>\"` / `ob today --print` / `ob search \"<query>\"`\n"
             "- Discord通知: `scripts/sec notify-discord --message \"<本文>\"`\n"
             "- SwitchBot家電操作: `scripts/sb cmd <名前またはID> <turnOn|turnOff|...>` / `scripts/sb status <名前またはID>` / `scripts/sb devices` / `scripts/sb scenes` / `scripts/sb scene <id>`\n"
-            "- タイマー・リマインダー: `scripts/timer add --sec <秒> --label \"<名前>\"` / `scripts/timer add --at \"HH:MM\" --label \"<名前>\"` / `scripts/timer list` / `scripts/timer cancel <id|名前|all>`"
+            "- タイマー・リマインダー: `scripts/timer add --sec <秒> --label \"<名前>\" --kind <alarm|reminder>` / `scripts/timer add --at \"HH:MM\" --label \"<名前>\" --kind <alarm|reminder>` / `scripts/timer list` / `scripts/timer cancel <id|名前|all>`"
         )
         if memory_text:
             secretary_hint += f"\n\n[記憶メモ (MEMORY.md)]\n{memory_text}"
@@ -396,6 +396,7 @@ def _timer_public_view(item: dict, now: Optional[float] = None) -> dict:
     return {
         "id": item["id"],
         "label": item["label"],
+        "kind": item.get("kind", "alarm"),
         "fire_at": item["fire_at"],
         "fire_at_iso": item["fire_at_iso"],
         "remaining_sec": max(0, int(round(item["fire_at"] - now))),
@@ -405,6 +406,7 @@ def _timer_public_view(item: dict, now: Optional[float] = None) -> dict:
 
 async def _fire_timer_item(item: dict) -> None:
     label = (item.get("label") or "タイマー").strip()
+    kind = item.get("kind", "alarm")
     if label in ("タイマー", ""):
         alert_text = "タイマーの時間です、マスター！"
     else:
@@ -415,6 +417,7 @@ async def _fire_timer_item(item: dict) -> None:
     shared_state.setdefault("alerts", []).append({
         "id": item["id"],
         "label": label,
+        "kind": kind,
         "text": alert_text,
         "fired_at": time.time(),
     })
@@ -732,6 +735,7 @@ class TimerCreateRequest(BaseModel):
     seconds: Optional[int] = None
     at: Optional[str] = None
     label: str = "タイマー"
+    kind: str = "alarm"
     notify_discord: bool = False
 
 
@@ -754,9 +758,11 @@ async def create_timer(req: TimerCreateRequest):
     fire_at = _parse_fire_at(req.seconds, req.at)
     local_tz = datetime.now().astimezone().tzinfo
     fire_dt = datetime.fromtimestamp(fire_at, tz=local_tz)
+    kind = "reminder" if str(req.kind).strip().lower() == "reminder" else "alarm"
     item = {
         "id": str(uuid.uuid4())[:8],
         "label": (req.label or "タイマー").strip() or "タイマー",
+        "kind": kind,
         "fire_at": fire_at,
         "fire_at_iso": fire_dt.isoformat(timespec="seconds"),
         "created_at": time.time(),

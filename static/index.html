@@ -970,6 +970,11 @@
         <input id="volRange" type="range" min="0.1" max="1.0" step="0.05" value="0.5" />
       </div>
 
+      <div class="setting-block">
+        <label class="setting-label" for="alarmVolRange"><span>アラーム音量</span><span id="alarmVolVal">100%</span></label>
+        <input id="alarmVolRange" type="range" min="0.2" max="1.5" step="0.05" value="1.0" />
+      </div>
+
       <button id="nightToggle" class="row-btn">
         <span>ナイトモード</span>
         <span id="nightState">OFF</span>
@@ -1026,6 +1031,8 @@
     const resetBtn = document.getElementById("resetBtn");
     const volRange = document.getElementById("volRange");
     const volVal = document.getElementById("volVal");
+    const alarmVolRange = document.getElementById("alarmVolRange");
+    const alarmVolVal = document.getElementById("alarmVolVal");
     const alarmBanner = document.getElementById("alarmBanner");
     const alarmBannerText = document.getElementById("alarmBannerText");
 
@@ -1033,6 +1040,7 @@
       speakerId: Number(localStorage.getItem("speakerId") || 3),
       speed: Number(localStorage.getItem("speed") || 1.12),
       volume: Number(localStorage.getItem("volume") || 0.5),
+      alarmVolume: Number(localStorage.getItem("alarmVolume") || 1.0),
       night: localStorage.getItem("night") === "1",
       silent: localStorage.getItem("silent") === "1",
     };
@@ -1089,7 +1097,9 @@
                       kind === "commit" ? [783.99] :
                       kind === "end" ? [659.25, 440.0] :
                       isAlarm ? [880.0, 1046.5, 1318.5, 1046.5, 880.0, 1046.5] : [];
-        const peak = (isAlarm && boost) ? 0.85 : Math.max(0.015, 0.08 * prefs.volume);
+        const peak = (isAlarm && boost)
+          ? Math.min(1.0, 0.75 * prefs.alarmVolume)
+          : Math.min(0.6, 0.22 * prefs.volume);
         const step = isAlarm ? 0.12 : 0.08;
         const dur = isAlarm ? 0.16 : 0.14;
         notes.forEach((freq, i) => {
@@ -1234,6 +1244,8 @@
     speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
     volRange.value = String(prefs.volume);
     volVal.textContent = `${Math.round(prefs.volume * 100)}%`;
+    alarmVolRange.value = String(prefs.alarmVolume);
+    alarmVolVal.textContent = `${Math.round(prefs.alarmVolume * 100)}%`;
 
     const MIC_SVG = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>`;
     const SEND_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg>`;
@@ -1283,7 +1295,7 @@
       alarmBanner.classList.remove("active");
     }
 
-    async function speakAlarmVoice(text) {
+    async function speakAlarmVoice(text, boost = true) {
       try {
         const res = await fetch("/api/tts", {
           method: "POST",
@@ -1295,12 +1307,12 @@
           }),
         });
         const data = await res.json();
-        if (!alarmActive || !data.audio_base64) return;
+        if ((boost && !alarmActive) || !data.audio_base64) return;
         const wavBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
-        if (callState === "idle" && alarmActive) {
+        if (callState === "idle" && (!boost || alarmActive)) {
           setCallState("speaking");
-          metaText.textContent = "アラーム再生中...";
-          await playWavBytes(wavBytes, text, true);
+          metaText.textContent = boost ? "アラーム再生中..." : "リマインド再生中...";
+          await playWavBytes(wavBytes, text, boost);
           if (callState === "speaking") {
             setCallState("idle");
             metaText.textContent = "準備完了";
@@ -1310,15 +1322,23 @@
     }
 
     async function triggerTimerAlert(alert) {
+      const isReminder = alert && alert.kind === "reminder";
+      unlockAudio();
+      if (isReminder) {
+        playChime("start", false);
+        if (alert && alert.text) {
+          setTimeout(() => { speakAlarmVoice(alert.text, false); }, 350);
+        }
+        return;
+      }
       stopAlarm();
       alarmActive = true;
       alarmBannerText.textContent = (alert && alert.label) ? alert.label : "アラーム";
       alarmBanner.classList.add("active");
-      unlockAudio();
       playChime("alarm", true);
       if (alert && alert.text) {
         setTimeout(() => {
-          if (alarmActive) speakAlarmVoice(alert.text);
+          if (alarmActive) speakAlarmVoice(alert.text, true);
         }, 700);
       }
       alarmLoopTimer = setInterval(() => {
@@ -1508,7 +1528,7 @@
           playGain.connect(audioCtx.destination);
         }
         if (playGain) {
-          playGain.gain.setValueAtTime(boostVolume ? 1.25 : prefs.volume, audioCtx.currentTime);
+          playGain.gain.setValueAtTime(boostVolume ? prefs.alarmVolume : prefs.volume, audioCtx.currentTime);
         }
         if (audioCtx.state === "suspended") {
           await audioCtx.resume().catch(() => {});
@@ -2154,6 +2174,23 @@
       if (playGain && audioCtx && !alarmActive) {
         playGain.gain.setValueAtTime(prefs.volume, audioCtx.currentTime);
       }
+    });
+    volRange.addEventListener("change", () => {
+      unlockAudio();
+      playChime("start", false);
+    });
+
+    alarmVolRange.addEventListener("input", () => {
+      prefs.alarmVolume = Number(alarmVolRange.value);
+      alarmVolVal.textContent = `${Math.round(prefs.alarmVolume * 100)}%`;
+      localStorage.setItem("alarmVolume", String(prefs.alarmVolume));
+      if (playGain && audioCtx && alarmActive) {
+        playGain.gain.setValueAtTime(prefs.alarmVolume, audioCtx.currentTime);
+      }
+    });
+    alarmVolRange.addEventListener("change", () => {
+      unlockAudio();
+      playChime("alarm", true);
     });
 
     alarmBanner.addEventListener("click", (e) => {
