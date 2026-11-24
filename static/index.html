@@ -661,19 +661,18 @@
     .text-input::placeholder { color: var(--muted); }
 
     .text-send {
+      width: 36px;
       height: 36px;
-      padding: 0 14px;
-      border-radius: 999px;
+      padding: 0;
+      border-radius: 50%;
       border: none;
       background: var(--accent);
       color: #0B1220;
-      font-size: 13px;
-      font-weight: 700;
       cursor: pointer;
       flex-shrink: 0;
       display: none;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
       touch-action: manipulation;
     }
     .text-send:active { transform: scale(0.96); }
@@ -942,7 +941,7 @@
 
           <form id="textBar" class="text-bar" autocomplete="off">
             <textarea id="textInput" class="text-input" rows="1" placeholder="メッセージを入力..."></textarea>
-            <button id="textSendBtn" type="submit" class="text-send">送信</button>
+            <button id="textSendBtn" type="submit" class="text-send" aria-label="送信" title="送信"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg></button>
             <button id="textCancelBtn" type="button" class="cancel-btn" aria-label="キャンセル" title="キャンセル">✕</button>
             <button id="textMicBtn" type="button" class="text-mic-btn talk-icon-slot" aria-label="話す"></button>
           </form>
