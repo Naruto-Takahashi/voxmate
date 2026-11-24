@@ -1143,6 +1143,10 @@
               metaText.textContent = "聞き取れませんでした";
               setCallState("idle");
               return;
+            } else if (ev.type === "error") {
+              metaText.textContent = "エラー: " + (ev.message || "音声処理に失敗しました");
+              setCallState("idle");
+              return;
             } else if (ev.type === "stt") {
               hasChatted = true;
               userUtterance.textContent = `あなた「${ev.user_text}」`;
@@ -1178,10 +1182,11 @@
       if (callState === "recording") return;
       try {
         await unlockAudio();
-        if (!stream) {
+        if (!stream || stream.getAudioTracks().every(t => t.readyState !== "live")) {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
           });
+          micAnalyser = null;
         }
         if (!micAnalyser) {
           const srcNode = audioCtx.createMediaStreamSource(stream);
@@ -1213,9 +1218,14 @@
             : "webm";
           const blob = new Blob(recChunks, { type: actualType });
           recChunks = [];
+          if (blob.size < 800) {
+            metaText.textContent = "音声が短すぎます";
+            setCallState("idle");
+            return;
+          }
           sendAudioStream(blob, ext);
         };
-        mr.start(200);
+        mr.start();
         setCallState("recording");
         playChime("start");
         triggerPortraitMotion("anim-nod");

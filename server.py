@@ -324,6 +324,9 @@ def transcribe_audio_bytes(audio_bytes: bytes, suffix: str = ".webm") -> str:
         res = subprocess.run(
             [
                 "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
                 "-y",
                 "-i",
                 str(in_path),
@@ -341,7 +344,7 @@ def transcribe_audio_bytes(audio_bytes: bytes, suffix: str = ".webm") -> str:
         )
         if res.returncode != 0:
             raise RuntimeError(
-                f"ffmpeg error: {res.stderr.decode('utf-8', errors='replace')[:300]}"
+                f"ffmpeg error ({suffix}, {len(audio_bytes)}B): {res.stderr.decode('utf-8', errors='replace')[-400:]}"
             )
 
         result = mlx_whisper.transcribe(
@@ -560,7 +563,12 @@ async def chat_audio_stream(
             return
 
         t0 = time.perf_counter()
-        user_text = await asyncio.to_thread(transcribe_audio_bytes, audio_bytes, suffix)
+        try:
+            user_text = await asyncio.to_thread(transcribe_audio_bytes, audio_bytes, suffix)
+        except Exception as exc:
+            print(f"[STT ERROR] {exc}", flush=True)
+            yield (json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False) + "\n").encode("utf-8")
+            return
         t_stt = time.perf_counter() - t0
         if not user_text:
             yield (json.dumps({"type": "empty"}) + "\n").encode("utf-8")
