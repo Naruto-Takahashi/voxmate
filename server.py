@@ -26,7 +26,7 @@ from silero_vad import get_speech_timestamps, load_silero_vad
 
 BASE_DIR = Path(__file__).resolve().parent
 CHAT_WORKDIR = Path(
-    os.environ.get("VOXDESK_WORKDIR", str(BASE_DIR / "chat_workspace"))
+    os.environ.get("VOXMATE_WORKDIR", str(BASE_DIR / "chat_workspace"))
 ).expanduser()
 CHAT_WORKDIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR = BASE_DIR / "static"
@@ -251,7 +251,7 @@ _vv_client: Optional[httpx.AsyncClient] = None
 _vad_model = None
 
 STATE_FILE = Path(
-    os.environ.get("VOXDESK_STATE_FILE", os.path.expanduser("~/.config/voxdesk/state.json"))
+    os.environ.get("VOXMATE_STATE_FILE", os.path.expanduser("~/.config/voxmate/state.json"))
 ).expanduser()
 
 
@@ -315,7 +315,7 @@ async def lifespan(app: FastAPI):
         await _vv_client.aclose()
 
 
-app = FastAPI(title="Echo Show 5 x agy x VOICEVOX", lifespan=lifespan)
+app = FastAPI(title="VoxMate", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -441,14 +441,14 @@ async def manifest():
 @app.get("/ca.crt")
 async def download_ca_cert():
     ca_path = Path(
-        os.environ.get("VOXDESK_CA_CERT", os.path.expanduser("~/.config/voxdesk/certs/rootCA.pem"))
+        os.environ.get("VOXMATE_CA_CERT", os.path.expanduser("~/.config/voxmate/certs/rootCA.pem"))
     ).expanduser()
     if not ca_path.exists():
         raise HTTPException(status_code=404, detail="CA certificate not configured")
     return FileResponse(
         str(ca_path),
         media_type="application/x-x509-ca-cert",
-        filename="voxdesk-ca.crt",
+        filename="voxmate-ca.crt",
     )
 
 
@@ -1055,11 +1055,11 @@ async def ws_voice(websocket: WebSocket):
 async def _serve_app() -> None:
     import uvicorn
 
-    host = os.environ.get("VOXDESK_HOST", "127.0.0.1")
-    http_port = int(os.environ.get("VOXDESK_PORT", "8000"))
-    https_port = int(os.environ.get("VOXDESK_HTTPS_PORT", "8443"))
-    ssl_cert = os.environ.get("VOXDESK_SSL_CERT", "")
-    ssl_key = os.environ.get("VOXDESK_SSL_KEY", "")
+    host = os.environ.get("VOXMATE_HOST", "127.0.0.1")
+    http_port = int(os.environ.get("VOXMATE_PORT", "8000"))
+    https_port = int(os.environ.get("VOXMATE_HTTPS_PORT", "8443"))
+    ssl_cert = os.environ.get("VOXMATE_SSL_CERT", "")
+    ssl_key = os.environ.get("VOXMATE_SSL_KEY", "")
 
     servers = [
         uvicorn.Server(uvicorn.Config(app, host=host, port=http_port)),

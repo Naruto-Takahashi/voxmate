@@ -1,6 +1,6 @@
 {
-  "name": "VoxDesk",
-  "short_name": "VoxDesk",
+  "name": "VoxMate",
+  "short_name": "VoxMate",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

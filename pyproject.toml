@@ -1,7 +1,7 @@
 [project]
-name = "voxdesk"
+name = "voxmate"
 version = "0.1.0"
-description = "Voice chat desk display powered by VOICEVOX, mlx-whisper, and agy"
+description = "Cross-device voice assistant powered by VOICEVOX, mlx-whisper, and agy"
 authors = [
     { name = "Naruto-Takahashi", email = "t.naruto7610@gmail.com" }
 ]
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-voxdesk = "voxdesk:main"
+voxmate = "voxmate:main"
 
 [build-system]
 requires = ["uv_build>=0.13.4,<0.14.0"]

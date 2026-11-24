@@ -1,6 +1,6 @@
-# VoxDesk
+# VoxMate
 
-Echo Show 5 などの小型ディスプレイ向けに最適化された、VOICEVOX × mlx-whisper × `agy` 連携の音声対話 Web アプリケーションです。
+Echo Show 5・スマートフォン・PC などマルチデバイスでキャラクター・会話履歴を同期できる、VOICEVOX × mlx-whisper × `agy` 連携の音声対話 Web アプリケーションです。
 
 ## スクリーンショット
 

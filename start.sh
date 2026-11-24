@@ -42,5 +42,5 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting VoxDesk server..."
+echo "Starting VoxMate server..."
 exec uv run python server.py
