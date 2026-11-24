@@ -560,6 +560,55 @@
     .hist-item.user { background: #1D2734; align-self: flex-end; max-width: 90%; }
     .hist-item.ai { background: rgba(255, 255, 255, 0.06); border-left: 3px solid var(--accent); align-self: flex-start; max-width: 95%; }
 
+    /* スリムな文字入力バー */
+    .text-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 8px;
+      flex-shrink: 0;
+      cursor: default;
+    }
+
+    .text-input {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      padding: 0 13px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(15, 20, 28, 0.78);
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+    .text-input::placeholder { color: var(--muted); }
+    .text-input:focus { border-color: var(--accent); }
+
+    .text-send {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .text-send:active { transform: scale(0.96); }
+
+    .kbd-toggle { display: none; }
+
+    /* Echo Show 5 等の小型横長画面では文字入力バーをデフォルト非表示（⌨で開閉） */
+    @media (max-width: 820px) and (max-height: 430px) {
+      .kbd-toggle { display: inline-flex; }
+      .text-bar { display: none; }
+      body.show-text-bar .text-bar { display: flex; }
+    }
+
     /* スマホ縦画面向けレスポンシブ */
     @media (max-width: 720px) and (orientation: portrait) {
       .layout {
@@ -622,6 +671,7 @@
           </div>
           <div class="header-tools">
             <button id="replayBtn" class="tool-btn" style="display:none;">もう一回</button>
+            <button id="kbdBtn" class="tool-btn icon-only kbd-toggle" aria-label="文字入力">⌨</button>
             <button id="historyBtn" class="tool-btn">履歴</button>
             <button id="settingsBtn" class="tool-btn icon-only" aria-label="設定">⚙</button>
           </div>
@@ -641,6 +691,11 @@
           <div class="reply-scroll">
             <div id="replyText" class="reply-text">画面をタップして話しかけてほしいのだ！</div>
           </div>
+
+          <form id="textBar" class="text-bar" autocomplete="off">
+            <input id="textInput" class="text-input" type="text" placeholder="メッセージを入力..." />
+            <button type="submit" class="text-send">送信</button>
+          </form>
         </section>
       </div>
 
@@ -1166,6 +1221,55 @@
       waveBars.forEach(b => b.style.height = "5px");
     }
 
+    async function consumeChatStream(res) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let lineBuf = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        lineBuf += decoder.decode(value, { stream: true });
+        const lines = lineBuf.split("\n");
+        lineBuf = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line);
+          if (ev.type === "empty") {
+            metaText.textContent = "聞き取れませんでした";
+            setCallState("idle");
+            return;
+          } else if (ev.type === "error") {
+            metaText.textContent = "エラー: " + (ev.message || "音声処理に失敗しました");
+            setCallState("idle");
+            return;
+          } else if (ev.type === "stt") {
+            hasChatted = true;
+            userUtterance.textContent = `あなた「${ev.user_text}」`;
+            userUtterance.classList.add("visible");
+            addHistory("user", ev.user_text);
+            replyText.textContent = "……";
+            metaText.textContent = "考え中...";
+          } else if (ev.type === "audio") {
+            replyAcc += (replyAcc ? " " : "") + ev.text;
+            replyText.textContent = replyAcc;
+            const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
+            lastReplyAudios.push(audioBytes);
+            replayBtn.style.display = "inline-flex";
+            setCallState("speaking");
+            playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
+          } else if (ev.type === "done" && ev.timings) {
+            if (replyAcc) addHistory("ai", replyAcc);
+            metaText.textContent = `応答 ${ev.timings.first_audio}s`;
+          }
+        }
+      }
+
+      await playChain;
+      setCallState("idle");
+    }
+
     async function sendAudioStream(blob, ext = "webm") {
       setCallState("thinking");
       playChime("commit");
@@ -1184,52 +1288,40 @@
         const res = await fetch("/api/chat/audio/stream", {
           method: "POST", body: fd, signal: abortCtrl.signal,
         });
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let lineBuf = "";
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          lineBuf += decoder.decode(value, { stream: true });
-          const lines = lineBuf.split("\n");
-          lineBuf = lines.pop() || "";
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const ev = JSON.parse(line);
-            if (ev.type === "empty") {
-              metaText.textContent = "聞き取れませんでした";
-              setCallState("idle");
-              return;
-            } else if (ev.type === "error") {
-              metaText.textContent = "エラー: " + (ev.message || "音声処理に失敗しました");
-              setCallState("idle");
-              return;
-            } else if (ev.type === "stt") {
-              hasChatted = true;
-              userUtterance.textContent = `あなた「${ev.user_text}」`;
-              userUtterance.classList.add("visible");
-              addHistory("user", ev.user_text);
-              replyText.textContent = "……";
-              metaText.textContent = "考え中...";
-            } else if (ev.type === "audio") {
-              replyAcc += (replyAcc ? " " : "") + ev.text;
-              replyText.textContent = replyAcc;
-              const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
-              lastReplyAudios.push(audioBytes);
-              replayBtn.style.display = "inline-flex";
-              setCallState("speaking");
-              playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
-            } else if (ev.type === "done" && ev.timings) {
-              if (replyAcc) addHistory("ai", replyAcc);
-              metaText.textContent = `応答 ${ev.timings.first_audio}s`;
-            }
-          }
-        }
-
-        await playChain;
+        await consumeChatStream(res);
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        metaText.textContent = "エラー: " + err.message;
         setCallState("idle");
+      }
+    }
+
+    async function sendTextStream(text) {
+      const trimmed = (text || "").trim();
+      if (!trimmed || callState === "thinking" || callState === "recording") return;
+      if (callState === "speaking") stopPlaybackOnly();
+      await unlockAudio().catch(() => {});
+
+      setCallState("thinking");
+      playChime("commit");
+      replyAcc = "";
+      lastReplyAudios = [];
+      playChain = Promise.resolve();
+      abortCtrl = new AbortController();
+      metaText.textContent = "考え中...";
+
+      try {
+        const res = await fetch("/api/chat/text/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: trimmed,
+            speaker_id: prefs.speakerId,
+            speed_scale: prefs.speed,
+          }),
+          signal: abortCtrl.signal,
+        });
+        await consumeChatStream(res);
       } catch (err) {
         if (err.name === "AbortError") return;
         metaText.textContent = "エラー: " + err.message;
@@ -1318,10 +1410,25 @@
       }
     }
 
+    const textBar = document.getElementById("textBar");
+    const textInput = document.getElementById("textInput");
+    document.getElementById("kbdBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.body.classList.toggle("show-text-bar");
+      if (document.body.classList.contains("show-text-bar")) textInput.focus();
+    });
+    textBar.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = textInput.value;
+      if (!val.trim()) return;
+      textInput.value = "";
+      sendTextStream(val);
+    });
+
     talkBtn.addEventListener("click", handleMainTap);
     rightPane.addEventListener("click", handleMainTap);
     leftPane.addEventListener("click", (e) => {
-      if (leftHeader.contains(e.target)) return;
+      if (leftHeader.contains(e.target) || textBar.contains(e.target)) return;
       handleMainTap();
     });
 

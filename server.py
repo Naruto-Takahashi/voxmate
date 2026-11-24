@@ -644,6 +644,130 @@ def matches_wake_word(text: str, speaker_id: int) -> bool:
     return any(w.lower() in norm for w in words)
 
 
+async def _stream_reply_events(
+    user_text: str,
+    speaker_id: int,
+    speed_scale: float,
+    t0: float,
+    t_stt: float,
+    reset: bool = False,
+) -> AsyncGenerator[bytes, None]:
+    tts_tasks: list[tuple[str, asyncio.Task[bytes]]] = []
+    buf = ""
+    split_re = re.compile(r"([。！？\n])")
+    t_ai_start = time.perf_counter()
+    first_audio_sent = False
+    first_audio_sec = 0.0
+
+    async def flush_sentence(s: str) -> None:
+        cleaned = clean_for_speech(s)
+        if cleaned:
+            task = asyncio.create_task(
+                synthesize_voicevox(cleaned, speaker_id, speed_scale)
+            )
+            tts_tasks.append((cleaned, task))
+
+    async for delta in agy_session.ask_deltas(
+        user_text, speaker_id=speaker_id, reset=reset
+    ):
+        buf += delta
+        while True:
+            m = split_re.search(buf)
+            if not m:
+                break
+            end_idx = m.end()
+            sentence = buf[:end_idx]
+            buf = buf[end_idx:]
+            await flush_sentence(sentence)
+
+            while tts_tasks and tts_tasks[0][1].done():
+                s_txt, task = tts_tasks.pop(0)
+                wav = await task
+                if not first_audio_sent:
+                    first_audio_sent = True
+                    first_audio_sec = time.perf_counter() - t0
+                yield (
+                    json.dumps(
+                        {
+                            "type": "audio",
+                            "text": s_txt,
+                            "audio_base64": base64.b64encode(wav).decode("ascii"),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                ).encode("utf-8")
+
+    if buf.strip():
+        await flush_sentence(buf)
+
+    t_ai = time.perf_counter() - t_ai_start
+    full_reply_parts: list[str] = []
+
+    for s_txt, task in tts_tasks:
+        wav = await task
+        full_reply_parts.append(s_txt)
+        if not first_audio_sent:
+            first_audio_sent = True
+            first_audio_sec = time.perf_counter() - t0
+        yield (
+            json.dumps(
+                {
+                    "type": "audio",
+                    "text": s_txt,
+                    "audio_base64": base64.b64encode(wav).decode("ascii"),
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+
+    _append_shared_history(user_text, " ".join(full_reply_parts))
+
+    yield (
+        json.dumps(
+            {
+                "type": "done",
+                "timings": {
+                    "stt": round(t_stt, 2),
+                    "agy": round(t_ai, 2),
+                    "first_audio": round(first_audio_sec, 2),
+                },
+            }
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+@app.post("/api/chat/text/stream")
+async def chat_text_stream(req: TextChatRequest):
+    user_text = req.text.strip()
+    if not user_text:
+        raise HTTPException(status_code=400, detail="Empty text")
+
+    async def event_stream() -> AsyncGenerator[bytes, None]:
+        t0 = time.perf_counter()
+        yield (
+            json.dumps(
+                {"type": "stt", "user_text": user_text, "stt_sec": 0.0},
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        try:
+            async for chunk in _stream_reply_events(
+                user_text, req.speaker_id, req.speed_scale, t0, 0.0, reset=req.reset
+            ):
+                yield chunk
+        except Exception as exc:
+            yield (
+                json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)
+                + "\n"
+            ).encode("utf-8")
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
 @app.post("/api/chat/audio/stream")
 async def chat_audio_stream(
     file: UploadFile = File(...),
@@ -694,89 +818,10 @@ async def chat_audio_stream(
             + "\n"
         ).encode("utf-8")
 
-        tts_tasks: list[tuple[str, asyncio.Task[bytes]]] = []
-        buf = ""
-        split_re = re.compile(r"([。！？\n])")
-        t_ai_start = time.perf_counter()
-        first_audio_sent = False
-        first_audio_sec = 0.0
-
-        async def flush_sentence(s: str) -> None:
-            cleaned = clean_for_speech(s)
-            if cleaned:
-                task = asyncio.create_task(
-                    synthesize_voicevox(cleaned, speaker_id, speed_scale)
-                )
-                tts_tasks.append((cleaned, task))
-
-        async for delta in agy_session.ask_deltas(user_text, speaker_id=speaker_id):
-            buf += delta
-            while True:
-                m = split_re.search(buf)
-                if not m:
-                    break
-                end_idx = m.end()
-                sentence = buf[:end_idx]
-                buf = buf[end_idx:]
-                await flush_sentence(sentence)
-
-                while tts_tasks and tts_tasks[0][1].done():
-                    s_txt, task = tts_tasks.pop(0)
-                    wav = await task
-                    if not first_audio_sent:
-                        first_audio_sent = True
-                        first_audio_sec = time.perf_counter() - t0
-                    yield (
-                        json.dumps(
-                            {
-                                "type": "audio",
-                                "text": s_txt,
-                                "audio_base64": base64.b64encode(wav).decode("ascii"),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + "\n"
-                    ).encode("utf-8")
-
-        if buf.strip():
-            await flush_sentence(buf)
-
-        t_ai = time.perf_counter() - t_ai_start
-        full_reply_parts: list[str] = []
-
-        for s_txt, task in tts_tasks:
-            wav = await task
-            full_reply_parts.append(s_txt)
-            if not first_audio_sent:
-                first_audio_sent = True
-                first_audio_sec = time.perf_counter() - t0
-            yield (
-                json.dumps(
-                    {
-                        "type": "audio",
-                        "text": s_txt,
-                        "audio_base64": base64.b64encode(wav).decode("ascii"),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            ).encode("utf-8")
-
-        _append_shared_history(user_text, " ".join(full_reply_parts))
-
-        yield (
-            json.dumps(
-                {
-                    "type": "done",
-                    "timings": {
-                        "stt": round(t_stt, 2),
-                        "agy": round(t_ai, 2),
-                        "first_audio": round(first_audio_sec, 2),
-                    },
-                }
-            )
-            + "\n"
-        ).encode("utf-8")
+        async for chunk in _stream_reply_events(
+            user_text, speaker_id, speed_scale, t0, t_stt
+        ):
+            yield chunk
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
