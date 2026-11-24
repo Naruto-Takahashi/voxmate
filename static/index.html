@@ -1296,11 +1296,11 @@
     function pickExpressionForText(text) {
       const t = String(text || "");
       if (!t) return "speak";
-      if (/(だめ|ダメ|禁止|コラ|こら|許さ|やめろ|怒|警告)/.test(t)) return "angry";
+      if (/(だめ|ダメ|禁止|コラッ|こらっ|許さ|やめろ|怒|警告)/.test(t)) return "angry";
       if (/(ありがと|感謝|照れ|てへ|えへ|好き|大好き|はずかし|恥ずかし|褒め|うれし|嬉し)/.test(t)) return "shy";
-      if (/(えっ|えぇ|驚|びっくり|ビックリ|まさか|なんと|アラーム|タイマー|時間です|お知らせ|おおっ)/.test(t)) return "surprised";
+      if (/(えっ|えぇ|驚|びっくり|ビックリ|まさか|なんと！|時間です|お知らせ|おおっ)/.test(t)) return "surprised";
       if (/(ごめん|すみません|申し訳|失敗|しっぱい|エラー|できませ|できない|出来ませ|出来ない|見つかり|わから|分から|困|残念|キャンセル|中止|無理|ないみたい|お待たせ|難しい|ちょっと待って)/.test(t)) return "troubled";
-      if (/[！!♪♫楽最高わーい]|おやすみ|おはよう|やった|おめでと|楽しみ|ばっちり|いいです/.test(t)) return "happy";
+      if (/[！!♪♫]|楽し|最高|わーい|おやすみ|おはよう|やった|おめでと|ばっちり|いいです/.test(t)) return "happy";
       return "speak";
     }
 
