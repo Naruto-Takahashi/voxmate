@@ -127,6 +127,9 @@ def build_preamble(speaker_id: int) -> str:
         "ユーザーをシステム上のユーザーIDやアカウント名で呼ばず、キャラクターの性格に合わせて「マスター」や「ご主人様」などと呼んでください。"
         "音声で読み上げるため、キャラクターの口調を保ったまま1〜3文程度の簡潔で自然な日本語で答えてください。"
         "Markdown記号（*や#や`）や箇条書き記号、URLは使わないでください。"
+        "各文の先頭に、その文の感情やポーズを表すタグを `[expr:種類]` 形式で1つだけ付けてください。"
+        "使える種類は `happy`（喜び・手を挙げる）、`shy`（照れ・感謝）、`surprised`（驚き・手を挙げる）、`troubled`（困り・謝罪）、`angry`（怒り・腕組み）、`speak`（通常）の6つです。"
+        "例: `[expr:shy]えへへ、ありがとうございます！[expr:happy]これからもよろしくお願いします！`"
         f"{workspace_hint}\n\nユーザーの発言: "
     )
 
@@ -388,7 +391,22 @@ class SettingsRequest(BaseModel):
     speed_scale: Optional[float] = None
 
 
+_EXPR_TAG_RE = re.compile(
+    r"\[(?:expr\s*:\s*)?(happy|shy|surprised|troubled|angry|speak)\]",
+    re.IGNORECASE,
+)
+
+
+def extract_expression_tag(text: str) -> tuple[str, Optional[str]]:
+    found: Optional[str] = None
+    for m in _EXPR_TAG_RE.finditer(text):
+        found = m.group(1).lower()
+    stripped = _EXPR_TAG_RE.sub("", text)
+    return stripped, found
+
+
 def clean_for_speech(text: str) -> str:
+    text = _EXPR_TAG_RE.sub("", text)
     text = re.sub(r"```[\s\S]*?```", "", text)
     text = re.sub(r"[`*_#>]+", "", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
@@ -881,25 +899,34 @@ async def _stream_reply_events(
     reset: bool = False,
     silent: bool = False,
 ) -> AsyncGenerator[bytes, None]:
-    tts_tasks: list[tuple[str, asyncio.Task[bytes]]] = []
+    tts_tasks: list[tuple[str, Optional[str], asyncio.Task[bytes]]] = []
     buf = ""
     split_re = re.compile(r"([。！？\n])")
     t_ai_start = time.perf_counter()
     first_audio_sent = False
     first_audio_sec = 0.0
     full_reply_parts: list[str] = []
+    pending_expr: Optional[str] = None
+    last_silent_expr: Optional[str] = None
 
     async def flush_sentence(s: str) -> None:
-        cleaned = clean_for_speech(s)
+        nonlocal pending_expr, last_silent_expr
+        raw_no_tag, parsed_expr = extract_expression_tag(s)
+        expr = parsed_expr or pending_expr
+        cleaned = clean_for_speech(raw_no_tag)
         if not cleaned:
+            if parsed_expr:
+                pending_expr = parsed_expr
             return
+        pending_expr = None
         if silent:
             full_reply_parts.append(cleaned)
+            last_silent_expr = expr
             return
         task = asyncio.create_task(
             synthesize_voicevox(cleaned, speaker_id, speed_scale)
         )
-        tts_tasks.append((cleaned, task))
+        tts_tasks.append((cleaned, expr, task))
 
     async def _fast_add_timer(
         seconds: Optional[int] = None,
@@ -945,13 +972,10 @@ async def _stream_reply_events(
         if silent and len(full_reply_parts) > prev_len:
             first_audio_sent = True
             first_audio_sec = time.perf_counter() - t0
-            yield (
-                json.dumps(
-                    {"type": "text", "text": full_reply_parts[-1]},
-                    ensure_ascii=False,
-                )
-                + "\n"
-            ).encode("utf-8")
+            ev_out = {"type": "text", "text": full_reply_parts[-1]}
+            if last_silent_expr:
+                ev_out["expr"] = last_silent_expr
+            yield (json.dumps(ev_out, ensure_ascii=False) + "\n").encode("utf-8")
     else:
         async for ev in agy_session.ask_events(
             user_text, speaker_id=speaker_id, reset=reset
@@ -979,32 +1003,26 @@ async def _stream_reply_events(
                     if not first_audio_sent:
                         first_audio_sent = True
                         first_audio_sec = time.perf_counter() - t0
-                    yield (
-                        json.dumps(
-                            {"type": "text", "text": full_reply_parts[-1]},
-                            ensure_ascii=False,
-                        )
-                        + "\n"
-                    ).encode("utf-8")
+                    ev_out = {"type": "text", "text": full_reply_parts[-1]}
+                    if last_silent_expr:
+                        ev_out["expr"] = last_silent_expr
+                    yield (json.dumps(ev_out, ensure_ascii=False) + "\n").encode("utf-8")
 
-                while tts_tasks and tts_tasks[0][1].done():
-                    s_txt, task = tts_tasks.pop(0)
+                while tts_tasks and tts_tasks[0][2].done():
+                    s_txt, s_expr, task = tts_tasks.pop(0)
                     wav = await task
                     full_reply_parts.append(s_txt)
                     if not first_audio_sent:
                         first_audio_sent = True
                         first_audio_sec = time.perf_counter() - t0
-                    yield (
-                        json.dumps(
-                            {
-                                "type": "audio",
-                                "text": s_txt,
-                                "audio_base64": base64.b64encode(wav).decode("ascii"),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + "\n"
-                    ).encode("utf-8")
+                    ev_out = {
+                        "type": "audio",
+                        "text": s_txt,
+                        "audio_base64": base64.b64encode(wav).decode("ascii"),
+                    }
+                    if s_expr:
+                        ev_out["expr"] = s_expr
+                    yield (json.dumps(ev_out, ensure_ascii=False) + "\n").encode("utf-8")
 
         if buf.strip():
             prev_len = len(full_reply_parts)
@@ -1013,33 +1031,27 @@ async def _stream_reply_events(
                 if not first_audio_sent:
                     first_audio_sent = True
                     first_audio_sec = time.perf_counter() - t0
-                yield (
-                    json.dumps(
-                        {"type": "text", "text": full_reply_parts[-1]},
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                ).encode("utf-8")
+                ev_out = {"type": "text", "text": full_reply_parts[-1]}
+                if last_silent_expr:
+                    ev_out["expr"] = last_silent_expr
+                yield (json.dumps(ev_out, ensure_ascii=False) + "\n").encode("utf-8")
 
     t_ai = time.perf_counter() - t_ai_start
 
-    for s_txt, task in tts_tasks:
+    for s_txt, s_expr, task in tts_tasks:
         wav = await task
         full_reply_parts.append(s_txt)
         if not first_audio_sent:
             first_audio_sent = True
             first_audio_sec = time.perf_counter() - t0
-        yield (
-            json.dumps(
-                {
-                    "type": "audio",
-                    "text": s_txt,
-                    "audio_base64": base64.b64encode(wav).decode("ascii"),
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
-        ).encode("utf-8")
+        ev_out = {
+            "type": "audio",
+            "text": s_txt,
+            "audio_base64": base64.b64encode(wav).decode("ascii"),
+        }
+        if s_expr:
+            ev_out["expr"] = s_expr
+        yield (json.dumps(ev_out, ensure_ascii=False) + "\n").encode("utf-8")
 
     _append_shared_history(user_text, " ".join(full_reply_parts))
 

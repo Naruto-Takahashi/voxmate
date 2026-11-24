@@ -1372,15 +1372,15 @@
         renderChatFeed();
       }
       exprUrls = {
-        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru5`,
-        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru5`,
-        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru5`,
-        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru5`,
-        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru5`,
-        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru5`,
-        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru5`,
-        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru5`,
-        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru5`,
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru6`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru6`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru6`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru6`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru6`,
+        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru6`,
+        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru6`,
+        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru6`,
+        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru6`,
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
@@ -1483,7 +1483,7 @@
       });
 
       if (next === "idle" || next === "listening") {
-        setExpression("idle");
+        if (!exprHoldTimer) setExpression("idle");
         waveBars.forEach(b => b.style.height = "5px");
       } else if (next === "recording") {
         setExpression("idle");
@@ -1777,9 +1777,13 @@
       }
     }
 
-    async function playWavBytes(audioBytes, sentenceText = "", boostVolume = false) {
+    const VALID_SENTENCE_EXPRS = new Set(["speak", "happy", "shy", "surprised", "troubled", "angry"]);
+
+    async function playWavBytes(audioBytes, sentenceText = "", boostVolume = false, explicitExpr = null) {
       unlockAudio();
-      currentSentenceExpr = pickExpressionForText(sentenceText);
+      currentSentenceExpr = (explicitExpr && VALID_SENTENCE_EXPRS.has(explicitExpr))
+        ? explicitExpr
+        : pickExpressionForText(sentenceText);
       if (currentSentenceExpr === "happy" || currentSentenceExpr === "surprised") {
         triggerPortraitMotion("anim-hop");
       }
@@ -2108,7 +2112,7 @@
             const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
             lastReplyAudios.push(audioBytes);
             setCallState("speaking");
-            playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text) : undefined);
+            playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text, false, ev.expr || null) : undefined);
           } else if (ev.type === "done" && ev.timings) {
             if (replyAcc) addHistory("ai", replyAcc);
             if (prefs.handsfree && hfActive) {
