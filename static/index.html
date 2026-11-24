@@ -561,56 +561,104 @@
     .hist-item.user { background: #1D2734; align-self: flex-end; max-width: 90%; }
     .hist-item.ai { background: rgba(255, 255, 255, 0.06); border-left: 3px solid var(--accent); align-self: flex-start; max-width: 95%; }
 
-    /* スリムな文字入力バー */
+    /* スリムな統合コンポーザーバー（案1） */
     .text-bar {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding-top: 8px;
+      margin-top: 8px;
+      padding: 4px 4px 4px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(15, 20, 28, 0.84);
       flex-shrink: 0;
       cursor: default;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .text-bar:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
     }
 
     .text-input {
       flex: 1;
       min-width: 0;
-      height: 40px;
-      padding: 0 14px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: rgba(15, 20, 28, 0.78);
+      height: 36px;
+      padding: 0;
+      border: none;
+      background: transparent;
       color: var(--text);
       font-size: 14px;
       outline: none;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
     .text-input::placeholder { color: var(--muted); }
-    .text-input:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--accent-dim);
-    }
 
     .text-send {
-      height: 40px;
-      padding: 0 16px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: none;
+      background: var(--accent);
+      color: #0B1220;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      touch-action: manipulation;
+    }
+    .text-send:active { transform: scale(0.96); }
+    .text-bar.has-text .text-send { display: inline-flex; }
+    .text-bar.has-text .text-mic-btn { display: none; }
+
+    .text-mic-btn {
+      height: 36px;
+      padding: 0 12px;
       border-radius: 999px;
       border: 1px solid var(--accent);
       background: var(--accent-dim);
       color: var(--text);
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       cursor: pointer;
       flex-shrink: 0;
+      touch-action: manipulation;
+      transition: background 0.18s, border-color 0.18s, transform 0.1s;
     }
-    .text-send:active { transform: scale(0.96); }
+    .text-mic-btn:active { transform: scale(0.97); }
+    .text-mic-btn .talk-left { font-size: 13px; gap: 7px; }
+    .text-mic-btn .wave { gap: 2px; }
 
+    body.mode-recording .text-mic-btn {
+      border-color: var(--rec);
+      background: rgba(255, 92, 92, 0.22);
+    }
+    body.mode-thinking .text-mic-btn {
+      border-color: var(--think);
+      background: rgba(245, 184, 65, 0.16);
+    }
+    body.mode-speaking .text-mic-btn {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    /* スマホ・PCでは統合バー内に「話す」を収めるため右下フローティングボタンを隠す */
+    .talk-btn { display: none; }
     .kbd-toggle { display: none; }
 
-    /* Echo Show 5 等の小型横長画面では文字入力バーをデフォルト非表示（⌨で開閉） */
+    /* Echo Show 5 等の小型横長画面では従来通り右下「話す」ピル＋⌨開閉 */
     @media (max-width: 820px) and (max-height: 430px) {
+      .talk-btn { display: inline-flex; }
       .kbd-toggle { display: inline-flex; }
       .text-bar { display: none; }
       body.show-text-bar .text-bar { display: flex; }
+      .text-mic-btn { display: none; }
+      .text-send { display: inline-flex; }
     }
 
     /* スマホ縦画面向けレスポンシブ（iPhone ノッチ / ホームバー対応） */
@@ -636,30 +684,10 @@
         font-size: 17px;
       }
       .text-bar {
-        gap: 6px;
-        padding-top: 10px;
-        padding-right: 118px;
+        margin-top: 10px;
       }
       .text-input {
         font-size: 16px;
-        padding: 0 12px;
-      }
-      .text-send {
-        padding: 0 12px;
-      }
-      .talk-btn {
-        right: 16px;
-        bottom: max(16px, calc(env(safe-area-inset-bottom) + 10px));
-        height: 40px;
-        padding: 0 12px;
-        gap: 8px;
-      }
-      .talk-left {
-        font-size: 14px;
-        gap: 7px;
-      }
-      .wave {
-        gap: 2px;
       }
       .sheet {
         width: min(360px, calc(100vw - 20px));
@@ -722,7 +750,20 @@
 
           <form id="textBar" class="text-bar" autocomplete="off">
             <input id="textInput" class="text-input" type="text" placeholder="メッセージを入力..." />
-            <button type="submit" class="text-send">送信</button>
+            <button id="textSendBtn" type="submit" class="text-send">↑ 送信</button>
+            <button id="textMicBtn" type="button" class="text-mic-btn">
+              <span class="talk-left">
+                <span class="status-dot"></span>
+                <span class="talk-label">話す</span>
+              </span>
+              <div class="wave">
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+              </div>
+            </button>
           </form>
         </section>
       </div>
@@ -736,7 +777,7 @@
       <button id="talkBtn" class="talk-btn">
         <span class="talk-left">
           <span id="dot" class="status-dot"></span>
-          <span id="talkLabel">話す</span>
+          <span id="talkLabel" class="talk-label">話す</span>
         </span>
         <div class="wave">
           <div class="wave-bar"></div>
@@ -822,7 +863,7 @@
     const userUtterance = document.getElementById("userUtterance");
     const metaText = document.getElementById("metaText");
     const talkBtn = document.getElementById("talkBtn");
-    const talkLabel = document.getElementById("talkLabel");
+    const talkLabels = Array.from(document.querySelectorAll(".talk-label"));
     const rightPane = document.getElementById("rightPane");
     const waveBars = Array.from(document.querySelectorAll(".wave-bar"));
     const replayBtn = document.getElementById("replayBtn");
@@ -1024,18 +1065,19 @@
       document.body.classList.remove("mode-listening", "mode-recording", "mode-thinking", "mode-speaking");
       if (next !== "idle") document.body.classList.add(`mode-${next}`);
 
+      const labelText = next === "idle" ? "話す"
+        : next === "recording" ? "送信する"
+        : next === "thinking" ? "考え中..."
+        : next === "speaking" ? "割り込む" : "話す";
+      talkLabels.forEach(el => { el.textContent = labelText; });
+
       if (next === "idle") {
-        talkLabel.textContent = "話す";
         setExpression("idle");
         waveBars.forEach(b => b.style.height = "5px");
       } else if (next === "recording") {
-        talkLabel.textContent = "送信する";
         setExpression("idle");
       } else if (next === "thinking") {
-        talkLabel.textContent = "考え中...";
         setExpression("think");
-      } else if (next === "speaking") {
-        talkLabel.textContent = "割り込む";
       }
     }
 
@@ -1573,6 +1615,15 @@
 
     const textBar = document.getElementById("textBar");
     const textInput = document.getElementById("textInput");
+    const textMicBtn = document.getElementById("textMicBtn");
+    const syncTextBarState = () => {
+      textBar.classList.toggle("has-text", textInput.value.trim().length > 0);
+    };
+    textInput.addEventListener("input", syncTextBarState);
+    textMicBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleMainTap();
+    });
     document.getElementById("kbdBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       document.body.classList.toggle("show-text-bar");
@@ -1584,6 +1635,7 @@
       const val = textInput.value;
       if (!val.trim()) return;
       textInput.value = "";
+      syncTextBarState();
       sendTextStream(val);
     });
 
