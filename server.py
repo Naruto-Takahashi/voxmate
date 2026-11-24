@@ -518,6 +518,17 @@ async def character_icon(speaker_id: int):
     )
 
 
+@app.get("/api/state")
+async def get_state():
+    return {
+        "agy_model": agy_session.model,
+        "speaker_id": shared_state["speaker_id"],
+        "speed_scale": shared_state["speed_scale"],
+        "history": shared_state["history"],
+        "state_version": shared_state["state_version"],
+    }
+
+
 @app.get("/api/health")
 async def health():
     vv_ok = False

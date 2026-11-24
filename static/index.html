@@ -957,6 +957,49 @@
     }
 
     let syncedVersion = 0;
+    function applySyncedState(data, firstLoad = false) {
+      if (data.agy_model && modelSelect.options.length > 0) {
+        modelSelect.value = data.agy_model;
+      }
+      const ver = Number(data.state_version || 0);
+      if (!firstLoad && ver === syncedVersion) return;
+      syncedVersion = ver;
+      let needVisual = firstLoad;
+      if (typeof data.speaker_id === "number" && data.speaker_id !== prefs.speakerId) {
+        prefs.speakerId = data.speaker_id;
+        localStorage.setItem("speakerId", String(prefs.speakerId));
+        needVisual = true;
+      }
+      if (typeof data.speed_scale === "number" && Math.abs(data.speed_scale - prefs.speed) > 1e-3) {
+        prefs.speed = data.speed_scale;
+        localStorage.setItem("speed", String(prefs.speed));
+        speedRange.value = String(prefs.speed);
+        speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
+      }
+      if (Array.isArray(data.history) && callState === "idle") {
+        historyItems = data.history.slice();
+        renderHistory();
+        if (historyItems.length > 0) {
+          const lastAi = [...historyItems].reverse().find(h => h.role === "ai");
+          const lastUser = [...historyItems].reverse().find(h => h.role === "user");
+          if (lastAi) {
+            hasChatted = true;
+            replyText.textContent = lastAi.text;
+          }
+          if (lastUser) {
+            userUtterance.textContent = `あなた「${lastUser.text}」`;
+            userUtterance.classList.add("visible");
+          }
+        } else if (hasChatted) {
+          hasChatted = false;
+          userUtterance.classList.remove("visible");
+          replayBtn.style.display = "none";
+          needVisual = true;
+        }
+      }
+      if (needVisual) applyCharacterVisual();
+    }
+
     async function loadHealth() {
       try {
         const res = await fetch("/api/health");
@@ -969,50 +1012,21 @@
           modelsList = data.models;
           modelSelect.innerHTML = modelsList.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
         }
-        if (data.agy_model) modelSelect.value = data.agy_model;
+        applySyncedState(data, firstLoad);
+      } catch (_) {}
+    }
 
-        const ver = Number(data.state_version || 0);
-        if (firstLoad || ver !== syncedVersion) {
-          syncedVersion = ver;
-          let needVisual = firstLoad;
-          if (typeof data.speaker_id === "number" && data.speaker_id !== prefs.speakerId) {
-            prefs.speakerId = data.speaker_id;
-            localStorage.setItem("speakerId", String(prefs.speakerId));
-            needVisual = true;
-          }
-          if (typeof data.speed_scale === "number" && Math.abs(data.speed_scale - prefs.speed) > 1e-3) {
-            prefs.speed = data.speed_scale;
-            localStorage.setItem("speed", String(prefs.speed));
-            speedRange.value = String(prefs.speed);
-            speedVal.textContent = `${prefs.speed.toFixed(2)}x`;
-          }
-          if (Array.isArray(data.history) && callState === "idle") {
-            historyItems = data.history.slice();
-            renderHistory();
-            if (historyItems.length > 0) {
-              const lastAi = [...historyItems].reverse().find(h => h.role === "ai");
-              const lastUser = [...historyItems].reverse().find(h => h.role === "user");
-              if (lastAi) {
-                hasChatted = true;
-                replyText.textContent = lastAi.text;
-              }
-              if (lastUser) {
-                userUtterance.textContent = `あなた「${lastUser.text}」`;
-                userUtterance.classList.add("visible");
-              }
-            } else if (hasChatted) {
-              hasChatted = false;
-              userUtterance.classList.remove("visible");
-              replayBtn.style.display = "none";
-              needVisual = true;
-            }
-          }
-          if (needVisual) applyCharacterVisual();
-        }
+    async function syncState() {
+      if (speakersList.length === 0) return;
+      try {
+        const res = await fetch("/api/state");
+        const data = await res.json();
+        applySyncedState(data, false);
       } catch (_) {}
     }
     loadHealth();
     setInterval(loadHealth, 15000);
+    setInterval(syncState, 3000);
 
     async function unlockAudio() {
       if (!audioCtx) {
