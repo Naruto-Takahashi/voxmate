@@ -9,7 +9,7 @@ PC・スマホ・Echo Show 5 で画面とアラームを同期しながら、時
 ## デモ・スクリーンショット
 
 > [!NOTE]
-> 以下は初回リリース時のデモであり、UIは変更される場合があります。
+> 表情・腕ポーズの変化、音素リップシンク、メッセージ送信、タイマー動作をまとめたデモです。
 
 ![VoxMate デモ](docs/screenshots/demo.gif)
 
@@ -36,6 +36,10 @@ PC・スマホ・Echo Show 5 で画面とアラームを同期しながら、時
 
 ## 主な機能
 
+- **生きている相棒表現（豊かな表情・音素リップシンク）**:
+  - LLM が文ごとの感情（`happy` / `shy` / `surprised` / `angry` / `sad` / `pale` / `playful` 等）を自動指定し、全12キャラクターの表情・腕ポーズ・控えめなモーションが文脈に合わせて連動
+  - VOICEVOX の音素タイムラインに同期した「あ・い・う・え・お」＆全感情リップシンク、まばたき・傾聴仕草、キャラ固有ギミック（耳垂れ・後ろのおばけ連動等）を搭載
+  - キャラ名での呼びかけに反応するウェイクワード＆ハイブリッド待機モードに対応
 - **マルチデバイス対応 UI**:
   - **PC**: 統合入力バー（`Enter` で改行、`Cmd/Ctrl + Enter` で送信、紙飛行機送信アイコン）＋ 右側フルハイト立ち絵
   - **Echo Show 5**: コンパクトなフローティングマイク・キャンセルボタン、大型アラーム停止モーダル
@@ -57,7 +61,7 @@ PC・スマホ・Echo Show 5 で画面とアラームを同期しながら、時
 - **STT**: macOS Apple Silicon は `mlx-whisper`、Linux / Windows は `faster-whisper` を自動選択（`uv sync` で環境に応じて自動インストール） + Silero VAD
 - **Fast-Path**: `fast_path.py`（時計・タイマー・SwitchBot キャッシュ照合）
 - **LLM バックエンド**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`)
-- **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio API ゲイン制御・リップシンク
+- **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio API ゲイン制御・音素同期リップシンク
 
 ---
 

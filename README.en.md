@@ -9,7 +9,7 @@ While keeping conversation history and alarm dismissal synced across PC, smartph
 ## Demo & Screenshots
 
 > [!NOTE]
-> A full walkthrough showing idle breathing & blinking, message input (paper-plane send), instant response & lip-sync, timer badge countdown, mail, calendar, and SwitchBot control.
+> A compact walkthrough showcasing expressive portrait & arm-pose transitions, phoneme-synced lip-sync, chat input, and timer controls.
 
 ![VoxMate Demo](docs/screenshots/demo.gif)
 
@@ -36,6 +36,10 @@ Switch characters and speaking styles with a single tap from the settings panel 
 
 ## Key Features
 
+- **Expressive Companion & Phoneme Lip-Sync**:
+  - LLM automatically tags per-sentence emotions (`happy`, `shy`, `surprised`, `angry`, `sad`, `pale`, `playful`, etc.), driving expressions, arm poses, and subtle CSS motions across all 12 characters
+  - VOICEVOX phoneme-synced vowel (`a/i/u/e/o`) and closed-mouth lip-sync across all emotions, natural blinking/listening gestures, and character-specific gimmicks
+  - Hands-free wake-word & hybrid follow-up listening mode
 - **Multi-Device Responsive UI**:
   - **PC**: Integrated input bar (`Enter` for newline, `Cmd/Ctrl + Enter` to send, paper-plane send icon) + full-height character portrait
   - **Echo Show 5**: Compact floating mic/cancel controls and a large centered alarm stop modal
@@ -57,7 +61,7 @@ Switch characters and speaking styles with a single tap from the settings panel 
 - **STT**: `mlx-whisper` on Apple Silicon macOS / `faster-whisper` on Linux & Windows (auto-selected via `uv sync`) + Silero VAD
 - **Fast-Path**: `fast_path.py` (clock, timers, cached SwitchBot matching)
 - **LLM Backends**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`)
-- **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio gain control & lip-sync
+- **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio gain control & phoneme-synced lip-sync
 
 ---
 
