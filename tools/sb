@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENV_FILE="${SWITCHBOT_ENV_FILE:-.env}"
+CACHE_FILE="${SWITCHBOT_CACHE_FILE:-.cache/switchbot-devices.json}"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+if [ -z "${SWITCHBOT_TOKEN:-}" ] || [ -z "${SWITCHBOT_SECRET:-}" ]; then
+  echo "SWITCHBOT_TOKEN / SWITCHBOT_SECRET not set (checked $ENV_FILE)" >&2
+  exit 1
+fi
+
+API_BASE="https://api.switch-bot.com/v1.1"
+
+sb_request() {
+  local method="$1"
+  local path="$2"
+  local body="${3:-}"
+  local t nonce data sign
+  t="$(($(date +%s) * 1000))"
+  nonce="$(uuidgen)"
+  data="${SWITCHBOT_TOKEN}${t}${nonce}"
+  sign="$(printf '%s' "$data" | openssl dgst -sha256 -hmac "$SWITCHBOT_SECRET" -binary | base64 | tr -d '\n')"
+
+  if [ -n "$body" ]; then
+    curl -sf -X "$method" "${API_BASE}${path}" \
+      -H "Authorization: ${SWITCHBOT_TOKEN}" \
+      -H "sign: ${sign}" \
+      -H "t: ${t}" \
+      -H "nonce: ${nonce}" \
+      -H "Content-Type: application/json; charset=utf8" \
+      -d "$body"
+  else
+    curl -sf -X "$method" "${API_BASE}${path}" \
+      -H "Authorization: ${SWITCHBOT_TOKEN}" \
+      -H "sign: ${sign}" \
+      -H "t: ${t}" \
+      -H "nonce: ${nonce}"
+  fi
+}
+
+fetch_devices() {
+  mkdir -p "$(dirname "$CACHE_FILE")"
+  sb_request GET "/devices" | jq '{
+    devices: [.body.deviceList[]? | {id: .deviceId, name: (.deviceName | gsub("^\\s+|\\s+$"; "")), type: .deviceType}],
+    remotes: [.body.infraredRemoteList[]? | {id: .deviceId, name: (.deviceName | gsub("^\\s+|\\s+$"; "")), type: .remoteType}]
+  }' | tee "$CACHE_FILE"
+}
+
+ensure_cache() {
+  if [ ! -f "$CACHE_FILE" ]; then
+    fetch_devices >/dev/null
+  fi
+}
+
+resolve_id() {
+  local target="$1"
+  if [[ "$target" =~ ^[0-9A-Fa-f]{12}$ ]] || [[ "$target" =~ ^[0-9]{2}-[0-9]+-[0-9]+$ ]]; then
+    printf '%s' "$target"
+    return 0
+  fi
+  ensure_cache
+  local resolved
+  resolved="$(jq -r --arg q "$target" '
+    (.devices + .remotes) as $all
+    | (($all | map(select(.name == $q)) | .[0].id)
+       // ($all | map(select(.name | ascii_downcase | contains($q | ascii_downcase))) | .[0].id)
+       // empty)
+  ' "$CACHE_FILE")"
+  if [ -n "$resolved" ]; then
+    printf '%s' "$resolved"
+  else
+    printf '%s' "$target"
+  fi
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  devices)
+    if [ "${1:-}" = "--refresh" ] || [ ! -f "$CACHE_FILE" ]; then
+      fetch_devices
+    else
+      cat "$CACHE_FILE"
+    fi
+    ;;
+  status)
+    dev_id="$(resolve_id "${1:?Usage: sb status <deviceId_or_name>}")"
+    sb_request GET "/devices/${dev_id}/status" | jq '.body'
+    ;;
+  cmd)
+    dev_id="$(resolve_id "${1:?Usage: sb cmd <deviceId_or_name> <command> [parameter] [commandType]}")"
+    command="${2:?Usage: sb cmd <deviceId_or_name> <command> [parameter] [commandType]}"
+    param="${3:-default}"
+    ctype="${4:-command}"
+    payload="$(jq -n --arg c "$command" --arg p "$param" --arg t "$ctype" '{command: $c, parameter: $p, commandType: $t}')"
+    sb_request POST "/devices/${dev_id}/commands" "$payload" | jq '{statusCode, message, body}'
+    ;;
+  scenes)
+    sb_request GET "/scenes" | jq '[.body[]? | {id: .sceneId, name: .sceneName}]'
+    ;;
+  scene)
+    scene_id="${1:?Usage: sb scene <sceneId>}"
+    sb_request POST "/scenes/${scene_id}/execute" "{}" | jq '{statusCode, message}'
+    ;;
+  *)
+    echo "Usage: sb <devices [--refresh]|status <id_or_name>|cmd <id_or_name> <command> [param] [type]|scenes|scene <id>>" >&2
+    exit 1
+    ;;
+esac

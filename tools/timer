@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL="${VOXMATE_URL:-http://127.0.0.1:8000}"
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  add)
+    seconds=""
+    at=""
+    label="タイマー"
+    kind="alarm"
+    notify_discord="false"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --sec|--seconds) seconds="$2"; shift 2 ;;
+        --at) at="$2"; shift 2 ;;
+        --label) label="$2"; shift 2 ;;
+        --kind) kind="$2"; shift 2 ;;
+        --discord) notify_discord="true"; shift ;;
+        *) shift ;;
+      esac
+    done
+    payload="$(jq -n \
+      --arg sec "$seconds" \
+      --arg at "$at" \
+      --arg label "$label" \
+      --arg kind "$kind" \
+      --argjson discord "$notify_discord" \
+      '{label: $label, kind: $kind, notify_discord: $discord}
+      + (if $sec != "" then {seconds: ($sec | tonumber)} else {} end)
+      + (if $at != "" then {at: $at} else {} end)')"
+    curl -sf -X POST "${BASE_URL}/api/timers" \
+      -H "Content-Type: application/json" \
+      -d "$payload"
+    echo ""
+    ;;
+  list)
+    curl -sf "${BASE_URL}/api/timers"
+    echo ""
+    ;;
+  cancel)
+    target="${1:?Usage: timer cancel <id|label|all>}"
+    if [ "$target" = "all" ]; then
+      payload='{"all":true}'
+    elif [[ "$target" =~ ^[0-9a-f]{8}$ ]]; then
+      payload="$(jq -n --arg id "$target" '{id: $id}')"
+    else
+      payload="$(jq -n --arg label "$target" '{label: $label}')"
+    fi
+    curl -sf -X POST "${BASE_URL}/api/timers/cancel" \
+      -H "Content-Type: application/json" \
+      -d "$payload"
+    echo ""
+    ;;
+  *)
+    echo "Usage: timer <add --sec N / --at HH:MM [--label TEXT] [--kind alarm|reminder] [--discord] | list | cancel <id|label|all>>" >&2
+    exit 1
+    ;;
+esac
