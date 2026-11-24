@@ -1024,7 +1024,8 @@
         const now = audioCtx.currentTime;
         const notes = kind === "start" ? [523.25, 659.25] :
                       kind === "commit" ? [783.99] :
-                      kind === "end" ? [659.25, 440.0] : [];
+                      kind === "end" ? [659.25, 440.0] :
+                      kind === "alarm" ? [880.0, 1046.5, 880.0, 1046.5] : [];
         notes.forEach((freq, i) => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
@@ -1202,6 +1203,19 @@
     setCallState("idle");
 
     let syncedVersion = 0;
+    const seenAlertIds = new Set();
+
+    async function triggerTimerAlert(alert) {
+      playChime("alarm");
+      if (callState === "idle" && alert && alert.text) {
+        const idx = historyItems.length - 1;
+        await new Promise(r => setTimeout(r, 380));
+        if (callState === "idle") {
+          playBubbleText(alert.text, idx >= 0 ? idx : 0);
+        }
+      }
+    }
+
     function applySyncedState(data, firstLoad = false) {
       if (data.agy_model && modelSelect.options.length > 0) {
         modelSelect.value = data.agy_model;
@@ -1229,6 +1243,17 @@
         const updated = historyItems.length !== prevLen || historyItems[historyItems.length - 1]?.text !== prevLast;
         if (updated) lastReplyAudios = [];
         renderChatFeed(null, updated);
+      }
+      if (Array.isArray(data.alerts)) {
+        let latestNewAlert = null;
+        for (const a of data.alerts) {
+          if (!a || !a.id || seenAlertIds.has(a.id)) continue;
+          seenAlertIds.add(a.id);
+          if (!firstLoad) latestNewAlert = a;
+        }
+        if (latestNewAlert) {
+          triggerTimerAlert(latestNewAlert);
+        }
       }
       if (needVisual) applyCharacterVisual();
     }
