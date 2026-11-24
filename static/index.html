@@ -494,7 +494,50 @@
       100% { transform: translateY(0) scale(1, 1); }
     }
 
+    .portrait-img.anim-playful {
+      animation: playfulTilt 0.54s cubic-bezier(0.22, 1, 0.36, 1) !important;
+    }
+
+    @keyframes playfulTilt {
+      0% { transform: translateY(0) rotate(0deg); }
+      35% { transform: translateY(-4px) rotate(1.6deg); }
+      72% { transform: translateY(1px) rotate(-0.8deg); }
+      100% { transform: translateY(0) rotate(0deg); }
+    }
+
+    .portrait-img.anim-shy {
+      animation: shySway 0.72s ease-in-out !important;
+    }
+
+    @keyframes shySway {
+      0%, 100% { transform: rotate(0deg); }
+      30% { transform: rotate(-1.3deg) translateY(1px); }
+      70% { transform: rotate(1.1deg) translateY(0.5px); }
+    }
+
+    .portrait-img.anim-droop {
+      animation: sadDroop 0.78s ease-in-out !important;
+    }
+
+    @keyframes sadDroop {
+      0%, 100% { transform: translateY(0) scale(1, 1); }
+      45% { transform: translateY(4px) scale(1.006, 0.992); }
+    }
+
+    .portrait-img.anim-shake {
+      animation: angryShake 0.38s ease-in-out !important;
+    }
+
+    @keyframes angryShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-2px); }
+      55% { transform: translateX(2px); }
+      80% { transform: translateX(-1px); }
+    }
+
     body.mode-recording .portrait-img {
+      animation: none;
+      transform: rotate(1.3deg) translateY(-1px);
       filter: drop-shadow(0 0 16px var(--accent-soft)) drop-shadow(0 12px 26px rgba(0, 0, 0, 0.55));
     }
 
@@ -1334,8 +1377,23 @@
     }
     scheduleBlink();
 
+    function scheduleIdleGesture() {
+      const wait = 20000 + Math.random() * 16000;
+      setTimeout(() => {
+        if ((callState === "idle" || callState === "listening") && currentExpr === "idle" && !exprHoldTimer) {
+          if (Math.random() < 0.55) {
+            triggerPortraitMotion("anim-nod");
+          } else {
+            holdExpression("think", 1100);
+          }
+        }
+        scheduleIdleGesture();
+      }, wait);
+    }
+    scheduleIdleGesture();
+
     function triggerPortraitMotion(cls) {
-      portraitImg.classList.remove("anim-hop", "anim-nod");
+      portraitImg.classList.remove("anim-hop", "anim-nod", "anim-playful", "anim-shy", "anim-droop", "anim-shake");
       void portraitImg.offsetWidth;
       portraitImg.classList.add(cls);
       portraitImg.addEventListener("animationend", () => {
@@ -1375,18 +1433,18 @@
         renderChatFeed();
       }
       exprUrls = {
-        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru8`,
-        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru8`,
-        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru8`,
-        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru8`,
-        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru8`,
-        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru8`,
-        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru8`,
-        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru8`,
-        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru8`,
-        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru8`,
-        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru8`,
-        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru8`,
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru9`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru9`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru9`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru9`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru9`,
+        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru9`,
+        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru9`,
+        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru9`,
+        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru9`,
+        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru9`,
+        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru9`,
+        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru9`,
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
@@ -1493,6 +1551,7 @@
         waveBars.forEach(b => b.style.height = "5px");
       } else if (next === "recording") {
         setExpression("idle");
+        if (prev !== "recording") triggerPortraitMotion("anim-nod");
       } else if (next === "thinking") {
         setExpression("think");
       }
@@ -1792,6 +1851,14 @@
         : pickExpressionForText(sentenceText);
       if (currentSentenceExpr === "happy" || currentSentenceExpr === "surprised") {
         triggerPortraitMotion("anim-hop");
+      } else if (currentSentenceExpr === "playful") {
+        triggerPortraitMotion("anim-playful");
+      } else if (currentSentenceExpr === "shy") {
+        triggerPortraitMotion("anim-shy");
+      } else if (currentSentenceExpr === "sad" || currentSentenceExpr === "pale") {
+        triggerPortraitMotion("anim-droop");
+      } else if (currentSentenceExpr === "angry") {
+        triggerPortraitMotion("anim-shake");
       }
 
       if (!isIOS) {
@@ -2089,6 +2156,7 @@
             return;
           } else if (ev.type === "woke") {
             playChime("start");
+            triggerPortraitMotion("anim-nod");
             followUpUntil = Date.now() + 12000;
             setCallState("idle");
             metaText.textContent = "どうぞお話しください";
@@ -2109,6 +2177,7 @@
             metaText.textContent = "考え中...";
           } else if (ev.type === "progress") {
             metaText.textContent = ev.label || "確認中...";
+            triggerPortraitMotion("anim-nod");
           } else if (ev.type === "text") {
             replyAcc += (replyAcc ? " " : "") + ev.text;
             renderChatFeed(replyAcc, false);

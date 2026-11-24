@@ -133,7 +133,7 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
         mouth = _pick_child(mouth_g, ("*わあー", "*あは", "*ほあー", "*ほえあー", "*おわー", "*おおー", "*えあー", "*ほあ", "*おー", "*お"))
     elif expr == "think":
         eye = _pick_child(eye_g, ("*上向き目", "*上向き", "*上むき", "*見上げ", "*基本目2", "*目逸らし", "*基本"))
-        brow = _pick_child(brow_g, ("*困り", "*こまり", "*上がり", "*基本"))
+        brow = _pick_child(brow_g, ("*基本眉", "*普通眉", "*基本", "*普通", "*上がり", "*ごきげん"))
         mouth = _pick_child(mouth_g, ("*んー", "*むん", "*んむ", "*ん", "*む", "*三角", "*△"))
         l_arm = _pick_child(l_arm_g, ("*考える", "*あごに指", "*口元に指", "*口元", "*頬に手", "*胸元", "*手のひら", "*基本", "*普通"))
     elif expr == "happy":
@@ -201,6 +201,27 @@ def _apply_expression(psd: PSDImage, expr: str) -> None:
             r_arm = None
     if r_arm_g is not None and r_arm is not None:
         _select_only(r_arm_g, r_arm)
+
+    # キャラ固有ギミック（コバコの耳・外ハネ垂れ、イタコの後ろのアイツ）
+    ear_g = _find_group(psd, ("!耳",))
+    if ear_g is not None:
+        ear_target = _pick_child(ear_g, ("*ぺたん",) if expr in ("sad", "troubled", "pale") else ("*基本",))
+        if ear_target is not None:
+            _select_only(ear_g, ear_target)
+    ahoge_g = _find_group(psd, ("!外ハネ",))
+    if ahoge_g is not None:
+        ahoge_target = _pick_child(ahoge_g, ("*外ハネ垂れ",) if expr in ("sad", "troubled", "pale") else ("*外ハネ",))
+        if ahoge_target is not None:
+            _select_only(ahoge_g, ahoge_target)
+    spirit_g = _find_group(psd, ("後ろのアイツ",))
+    if spirit_g is not None:
+        spirit_target = _pick_child(
+            spirit_g,
+            ("*しょぼん",) if expr in ("sad", "troubled", "pale", "angry") else ("*にっこり",),
+        )
+        if spirit_target is not None:
+            _select_only(spirit_g, spirit_target)
+
     _set_symbols(psd, want_sweat=want_sweat, want_tear=want_tear, want_sweat_heavy=want_sweat_heavy)
 
 
