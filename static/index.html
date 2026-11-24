@@ -1276,6 +1276,8 @@
     let replyAcc = "";
     let currentSentenceExpr = "speak";
     let exprHoldTimer = null;
+    let currentLipsync = null;
+    let currentPlayStartCtxTime = 0;
     let currentExpr = "idle";
     let exprUrls = { idle: "", blink: "", speak: "", think: "", happy: "" };
     let blinkTimer = null;
@@ -1433,18 +1435,23 @@
         renderChatFeed();
       }
       exprUrls = {
-        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru9`,
-        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru9`,
-        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru9`,
-        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru9`,
-        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru9`,
-        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru9`,
-        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru9`,
-        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru9`,
-        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru9`,
-        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru9`,
-        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru9`,
-        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru9`,
+        idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru10`,
+        blink: `/api/character/${sp.id}/portrait?expr=blink&v=ahiru10`,
+        speak: `/api/character/${sp.id}/portrait?expr=speak&v=ahiru10`,
+        speak_a: `/api/character/${sp.id}/portrait?expr=speak_a&v=ahiru10`,
+        speak_i: `/api/character/${sp.id}/portrait?expr=speak_i&v=ahiru10`,
+        speak_u: `/api/character/${sp.id}/portrait?expr=speak_u&v=ahiru10`,
+        speak_e: `/api/character/${sp.id}/portrait?expr=speak_e&v=ahiru10`,
+        speak_o: `/api/character/${sp.id}/portrait?expr=speak_o&v=ahiru10`,
+        think: `/api/character/${sp.id}/portrait?expr=think&v=ahiru10`,
+        happy: `/api/character/${sp.id}/portrait?expr=happy&v=ahiru10`,
+        troubled: `/api/character/${sp.id}/portrait?expr=troubled&v=ahiru10`,
+        surprised: `/api/character/${sp.id}/portrait?expr=surprised&v=ahiru10`,
+        shy: `/api/character/${sp.id}/portrait?expr=shy&v=ahiru10`,
+        angry: `/api/character/${sp.id}/portrait?expr=angry&v=ahiru10`,
+        sad: `/api/character/${sp.id}/portrait?expr=sad&v=ahiru10`,
+        pale: `/api/character/${sp.id}/portrait?expr=pale&v=ahiru10`,
+        playful: `/api/character/${sp.id}/portrait?expr=playful&v=ahiru10`,
       };
       Object.values(exprUrls).forEach(url => { const im = new Image(); im.src = url; });
       currentExpr = "idle";
@@ -1844,8 +1851,9 @@
 
     const VALID_SENTENCE_EXPRS = new Set(["speak", "happy", "shy", "surprised", "troubled", "angry", "sad", "pale", "playful"]);
 
-    async function playWavBytes(audioBytes, sentenceText = "", boostVolume = false, explicitExpr = null) {
+    async function playWavBytes(audioBytes, sentenceText = "", boostVolume = false, explicitExpr = null, lipsync = null) {
       unlockAudio();
+      currentLipsync = (Array.isArray(lipsync) && lipsync.length > 0) ? lipsync : null;
       currentSentenceExpr = (explicitExpr && VALID_SENTENCE_EXPRS.has(explicitExpr))
         ? explicitExpr
         : pickExpressionForText(sentenceText);
@@ -1883,6 +1891,7 @@
           src.buffer = audioBuffer;
           src.connect(playAnalyser);
           activeSources.push(src);
+          currentPlayStartCtxTime = audioCtx.currentTime;
           startLipSync();
           src.onended = () => {
             activeSources = activeSources.filter(s => s !== src);
@@ -2084,7 +2093,20 @@
           rms = currentRmsEnv[idx] || 0;
         }
         const now = performance.now();
-        if (rms > 0.028) {
+        if (currentSentenceExpr === "speak" && currentLipsync) {
+          const elapsedMs = (!isIOS && audioCtx)
+            ? Math.max(0, (audioCtx.currentTime - currentPlayStartCtxTime) * 1000)
+            : Math.max(0, (sharedAudioEl.currentTime || 0) * 1000);
+          let shape = "idle";
+          for (let i = 0; i < currentLipsync.length; i++) {
+            if (currentLipsync[i][0] <= elapsedMs) {
+              shape = currentLipsync[i][1];
+            } else {
+              break;
+            }
+          }
+          setExpression(shape === "idle" ? "idle" : `speak_${shape}`);
+        } else if (rms > 0.028) {
           lastLoudAt = now;
           setExpression(currentSentenceExpr);
         } else if (now - lastLoudAt > 145) {
@@ -2187,7 +2209,7 @@
             const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
             lastReplyAudios.push(audioBytes);
             setCallState("speaking");
-            playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text, false, ev.expr || null) : undefined);
+            playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text, false, ev.expr || null, ev.lipsync || null) : undefined);
           } else if (ev.type === "done" && ev.timings) {
             if (replyAcc) addHistory("ai", replyAcc);
             if (prefs.handsfree && hfActive) {

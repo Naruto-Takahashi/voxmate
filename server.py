@@ -414,15 +414,50 @@ def clean_for_speech(text: str) -> str:
     return text
 
 
-_tts_cache: dict[tuple[str, int, float], bytes] = {}
+_tts_cache: dict[tuple[str, int, float], tuple[bytes, list[list]]] = {}
 _TTS_CACHE_MAX = 64
 
 
-async def synthesize_voicevox(
+def _extract_lipsync_timeline(query: dict, speed_scale: float) -> list[list]:
+    """VOICEVOX audio_query から [開始ms, 口形状] の簡易タイムラインを生成する。"""
+    sp = max(0.5, float(speed_scale or 1.0))
+    t_sec = float(query.get("prePhonemeLength") or 0.0) / sp
+    events: list[list] = [[0, "idle"]]
+
+    def push_ev(ms: int, shape: str) -> None:
+        if events[-1][1] == shape:
+            return
+        if events[-1][0] == ms:
+            events[-1][1] = shape
+        else:
+            events.append([ms, shape])
+
+    for phrase in query.get("accent_phrases") or []:
+        for mora in phrase.get("moras") or []:
+            c_len = float(mora.get("consonant_length") or 0.0) / sp
+            v_len = float(mora.get("vowel_length") or 0.0) / sp
+            t_sec += c_len
+            vowel = str(mora.get("vowel") or "").lower()
+            shape = vowel if vowel in ("a", "i", "u", "e", "o") else "idle"
+            if v_len > 0:
+                push_ev(int(round(t_sec * 1000)), shape)
+            t_sec += v_len
+        pm = phrase.get("pause_mora")
+        if pm:
+            p_len = (float(pm.get("consonant_length") or 0.0) + float(pm.get("vowel_length") or 0.0)) / sp
+            if p_len > 0:
+                push_ev(int(round(t_sec * 1000)), "idle")
+            t_sec += p_len
+
+    push_ev(int(round(t_sec * 1000)), "idle")
+    return events
+
+
+async def synthesize_voicevox_with_lipsync(
     text: str,
     speaker_id: int = DEFAULT_SPEAKER_ID,
     speed_scale: float = 1.12,
-) -> bytes:
+) -> tuple[bytes, list[list]]:
     sp_rounded = round(max(0.7, min(1.6, float(speed_scale))), 2)
     cache_key = (text, int(speaker_id), sp_rounded)
     if len(text) <= 60 and cache_key in _tts_cache:
@@ -436,6 +471,7 @@ async def synthesize_voicevox(
     q_resp.raise_for_status()
     query = q_resp.json()
     query["speedScale"] = sp_rounded
+    lipsync = _extract_lipsync_timeline(query, sp_rounded)
 
     s_resp = await client.post(
         f"{VOICEVOX_URL}/synthesis",
@@ -447,7 +483,16 @@ async def synthesize_voicevox(
     if len(text) <= 60:
         if len(_tts_cache) >= _TTS_CACHE_MAX:
             _tts_cache.pop(next(iter(_tts_cache)))
-        _tts_cache[cache_key] = audio
+        _tts_cache[cache_key] = (audio, lipsync)
+    return audio, lipsync
+
+
+async def synthesize_voicevox(
+    text: str,
+    speaker_id: int = DEFAULT_SPEAKER_ID,
+    speed_scale: float = 1.12,
+) -> bytes:
+    audio, _ = await synthesize_voicevox_with_lipsync(text, speaker_id, speed_scale)
     return audio
 
 
@@ -580,6 +625,11 @@ async def character_portrait(speaker_id: int, expr: str = "idle"):
             "idle",
             "blink",
             "speak",
+            "speak_a",
+            "speak_i",
+            "speak_u",
+            "speak_e",
+            "speak_o",
             "think",
             "happy",
             "troubled",
@@ -927,7 +977,7 @@ async def _stream_reply_events(
             last_silent_expr = expr
             return
         task = asyncio.create_task(
-            synthesize_voicevox(cleaned, speaker_id, speed_scale)
+            synthesize_voicevox_with_lipsync(cleaned, speaker_id, speed_scale)
         )
         tts_tasks.append((cleaned, expr, task))
 
@@ -1013,7 +1063,7 @@ async def _stream_reply_events(
 
                 while tts_tasks and tts_tasks[0][2].done():
                     s_txt, s_expr, task = tts_tasks.pop(0)
-                    wav = await task
+                    wav, lipsync = await task
                     full_reply_parts.append(s_txt)
                     if not first_audio_sent:
                         first_audio_sent = True
@@ -1022,6 +1072,7 @@ async def _stream_reply_events(
                         "type": "audio",
                         "text": s_txt,
                         "audio_base64": base64.b64encode(wav).decode("ascii"),
+                        "lipsync": lipsync,
                     }
                     if s_expr:
                         ev_out["expr"] = s_expr
@@ -1042,7 +1093,7 @@ async def _stream_reply_events(
     t_ai = time.perf_counter() - t_ai_start
 
     for s_txt, s_expr, task in tts_tasks:
-        wav = await task
+        wav, lipsync = await task
         full_reply_parts.append(s_txt)
         if not first_audio_sent:
             first_audio_sent = True
@@ -1051,6 +1102,7 @@ async def _stream_reply_events(
             "type": "audio",
             "text": s_txt,
             "audio_base64": base64.b64encode(wav).decode("ascii"),
+            "lipsync": lipsync,
         }
         if s_expr:
             ev_out["expr"] = s_expr
