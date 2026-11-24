@@ -116,7 +116,7 @@
       padding: 14px 10px 14px 20px;
       min-width: 0;
       min-height: 0;
-      cursor: pointer;
+      cursor: default;
     }
 
     /* 上段：大きな時計 ＋ ユーティリティボタン */
@@ -226,40 +226,48 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .user-utterance {
-      display: none;
-      align-self: flex-start;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 6px 12px;
-      font-size: 13.5px;
-      color: var(--muted);
-      line-height: 1.4;
-      max-width: 100%;
-      flex-shrink: 0;
-    }
-
-    .user-utterance.visible {
-      display: block;
-    }
-
-    .reply-scroll {
+    .chat-scroll {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      padding-right: 6px;
+      -webkit-overflow-scrolling: touch;
+      padding: 2px 6px 4px 0;
     }
 
-    .reply-scroll::-webkit-scrollbar { width: 3px; }
-    .reply-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+    .chat-scroll::-webkit-scrollbar { width: 3px; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
 
-    .reply-text {
-      font-size: 21px;
-      font-weight: 600;
-      line-height: 1.54;
+    .chat-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .chat-bubble {
+      max-width: 88%;
+      padding: 9px 13px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.5;
       color: var(--text);
       word-break: break-word;
+    }
+
+    .chat-bubble.user {
+      align-self: flex-end;
+      background: #1D2838;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-bottom-right-radius: 5px;
+      font-size: 14.5px;
+    }
+
+    .chat-bubble.ai {
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-left: 3px solid var(--accent);
+      border-bottom-left-radius: 5px;
     }
 
     /* 右下フローティング・コンパクトマイクピル（画面を圧迫しない） */
@@ -728,7 +736,6 @@
           <div class="header-tools">
             <button id="replayBtn" class="tool-btn" style="display:none;">もう一回</button>
             <button id="kbdBtn" class="tool-btn icon-only kbd-toggle" aria-label="文字入力">⌨</button>
-            <button id="historyBtn" class="tool-btn">履歴</button>
             <button id="settingsBtn" class="tool-btn icon-only" aria-label="設定">⚙</button>
           </div>
         </header>
@@ -742,10 +749,8 @@
             <span id="metaText" class="meta-badge">準備完了</span>
           </div>
 
-          <div id="userUtterance" class="user-utterance"></div>
-
-          <div class="reply-scroll">
-            <div id="replyText" class="reply-text">画面をタップして話しかけてほしいのだ！</div>
+          <div id="chatScroll" class="chat-scroll">
+            <div id="chatFeed" class="chat-feed"></div>
           </div>
 
           <form id="textBar" class="text-bar" autocomplete="off">
@@ -822,15 +827,6 @@
         <span>↺</span>
       </button>
     </aside>
-
-    <!-- 履歴シート -->
-    <aside id="historySheet" class="sheet" aria-label="会話履歴">
-      <div class="sheet-head">
-        <span>会話履歴</span>
-        <button id="closeHistoryBtn" class="tool-btn icon-only">✕</button>
-      </div>
-      <div id="historyList" class="history-list"></div>
-    </aside>
   </div>
   <div class="preview-caption">Echo Show 5 実機比率プレビュー（物理 960×480 / 195dpi → 実効 788×394・2:1）</div>
 
@@ -857,10 +853,8 @@
     const portraitImg = document.getElementById("portraitImg");
     const speakerNameEl = document.getElementById("speakerName");
     const speakerStyleEl = document.getElementById("speakerStyle");
-    const leftPane = document.getElementById("leftPane");
-    const leftHeader = document.getElementById("leftHeader");
-    const replyText = document.getElementById("replyText");
-    const userUtterance = document.getElementById("userUtterance");
+    const chatScroll = document.getElementById("chatScroll");
+    const chatFeed = document.getElementById("chatFeed");
     const metaText = document.getElementById("metaText");
     const talkBtn = document.getElementById("talkBtn");
     const talkLabels = Array.from(document.querySelectorAll(".talk-label"));
@@ -870,7 +864,6 @@
 
     const backdrop = document.getElementById("backdrop");
     const settingsSheet = document.getElementById("settingsSheet");
-    const historySheet = document.getElementById("historySheet");
     const charGrid = document.getElementById("charGrid");
     const modelSelect = document.getElementById("modelSelect");
     const speedRange = document.getElementById("speedRange");
@@ -878,7 +871,6 @@
     const nightToggle = document.getElementById("nightToggle");
     const nightState = document.getElementById("nightState");
     const resetBtn = document.getElementById("resetBtn");
-    const historyList = document.getElementById("historyList");
 
     const prefs = {
       speakerId: Number(localStorage.getItem("speakerId") || 3),
@@ -1006,7 +998,7 @@
       speakerNameEl.textContent = sp.name;
       speakerStyleEl.textContent = sp.style;
       if (!hasChatted) {
-        replyText.textContent = GREETINGS[sp.name] || "いつでも話しかけてね！";
+        renderChatFeed();
       }
       exprUrls = {
         idle: `/api/character/${sp.id}/portrait?expr=idle&v=ahiru4`,
@@ -1103,24 +1095,9 @@
       }
       if (Array.isArray(data.history) && callState === "idle") {
         historyItems = data.history.slice();
-        renderHistory();
-        if (historyItems.length > 0) {
-          const lastAi = [...historyItems].reverse().find(h => h.role === "ai");
-          const lastUser = [...historyItems].reverse().find(h => h.role === "user");
-          if (lastAi) {
-            hasChatted = true;
-            replyText.textContent = lastAi.text;
-          }
-          if (lastUser) {
-            userUtterance.textContent = `あなた「${lastUser.text}」`;
-            userUtterance.classList.add("visible");
-          }
-        } else if (hasChatted) {
-          hasChatted = false;
-          userUtterance.classList.remove("visible");
-          replayBtn.style.display = "none";
-          needVisual = true;
-        }
+        hasChatted = historyItems.length > 0;
+        if (!hasChatted) replayBtn.style.display = "none";
+        renderChatFeed();
       }
       if (needVisual) applyCharacterVisual();
     }
@@ -1279,23 +1256,34 @@
       });
     }
 
+    function escHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
     function addHistory(role, text) {
       historyItems.push({ role, text });
       if (historyItems.length > 30) historyItems.shift();
-      renderHistory();
+      renderChatFeed();
     }
 
-    function renderHistory() {
-      if (historyItems.length === 0) {
-        historyList.innerHTML = `<div style="color:var(--muted);font-size:13px;">まだ会話履歴はありません。</div>`;
+    function renderChatFeed(streamingText = null) {
+      const items = historyItems.slice();
+      if (items.length === 0 && streamingText === null) {
+        const sp = speakersList.find(s => s.id === prefs.speakerId);
+        const greet = (sp && GREETINGS[sp.name]) || "いつでも話しかけてね！";
+        chatFeed.innerHTML = `<div class="chat-bubble ai">${escHtml(greet)}</div>`;
         return;
       }
-      historyList.innerHTML = historyItems.map(it =>
-        `<div class="hist-item ${it.role}">${it.text.replace(/</g, "&lt;")}</div>`
+      let html = items.map(it =>
+        `<div class="chat-bubble ${it.role}">${escHtml(it.text)}</div>`
       ).join("");
-      historyList.scrollTop = historyList.scrollHeight;
+      if (streamingText !== null) {
+        html += `<div class="chat-bubble ai">${escHtml(streamingText)}</div>`;
+      }
+      chatFeed.innerHTML = html;
+      requestAnimationFrame(() => { chatScroll.scrollTop = chatScroll.scrollHeight; });
     }
-    renderHistory();
+    renderChatFeed();
 
     function stopLipSync() {
       if (lipSyncRaf) cancelAnimationFrame(lipSyncRaf);
@@ -1390,14 +1378,12 @@
             return;
           } else if (ev.type === "stt") {
             hasChatted = true;
-            userUtterance.textContent = `あなた「${ev.user_text}」`;
-            userUtterance.classList.add("visible");
             addHistory("user", ev.user_text);
-            replyText.textContent = "……";
+            renderChatFeed("……");
             metaText.textContent = "考え中...";
           } else if (ev.type === "audio") {
             replyAcc += (replyAcc ? " " : "") + ev.text;
-            replyText.textContent = replyAcc;
+            renderChatFeed(replyAcc);
             const audioBytes = Uint8Array.from(atob(ev.audio_base64), c => c.charCodeAt(0));
             lastReplyAudios.push(audioBytes);
             replayBtn.style.display = "inline-flex";
@@ -1641,10 +1627,6 @@
 
     talkBtn.addEventListener("click", handleMainTap);
     rightPane.addEventListener("click", handleMainTap);
-    leftPane.addEventListener("click", (e) => {
-      if (leftHeader.contains(e.target) || textBar.contains(e.target)) return;
-      handleMainTap();
-    });
 
     replayBtn.addEventListener("click", async () => {
       if (lastReplyAudios.length === 0 || callState === "thinking" || callState === "speaking" || callState === "recording") return;
@@ -1658,7 +1640,6 @@
 
     function closeSheets() {
       settingsSheet.classList.remove("open");
-      historySheet.classList.remove("open");
       backdrop.classList.remove("open");
     }
     document.getElementById("settingsBtn").addEventListener("click", () => {
@@ -1666,13 +1647,7 @@
       settingsSheet.classList.add("open");
       backdrop.classList.add("open");
     });
-    document.getElementById("historyBtn").addEventListener("click", () => {
-      closeSheets();
-      historySheet.classList.add("open");
-      backdrop.classList.add("open");
-    });
     document.getElementById("closeSettingsBtn").addEventListener("click", closeSheets);
-    document.getElementById("closeHistoryBtn").addEventListener("click", closeSheets);
     backdrop.addEventListener("click", closeSheets);
 
     modelSelect.addEventListener("change", async () => {
@@ -1710,8 +1685,7 @@
       await fetch("/api/reset", { method: "POST" });
       historyItems = [];
       hasChatted = false;
-      renderHistory();
-      userUtterance.classList.remove("visible");
+      renderChatFeed();
       replayBtn.style.display = "none";
       lastReplyAudios = [];
       applyCharacterVisual();
