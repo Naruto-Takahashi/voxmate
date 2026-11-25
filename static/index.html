@@ -2259,7 +2259,9 @@
       await playChain;
       setCallState("idle");
       if (prefs.handsfree && hfActive) {
-        openFollowUp("まだ聞いてますよ", 10000);
+        followUpUntil = 0;
+        if (followUpResetTimer) { clearTimeout(followUpResetTimer); followUpResetTimer = null; }
+        metaText.textContent = "耳を澄ませ中";
       }
     }
 
