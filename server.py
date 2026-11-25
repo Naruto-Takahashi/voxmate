@@ -519,6 +519,11 @@ def _get_faster_whisper_model():
 
 def _transcribe_wav_file(wav_path: Path) -> str:
     prefer = os.environ.get("VOXMATE_STT", "").strip().lower()
+    if prefer == "amivoice":
+        from stt_amivoice import transcribe_wav_amivoice
+
+        return transcribe_wav_amivoice(wav_path)
+
     use_mlx = (mlx_whisper is not None) and (prefer != "faster-whisper")
     if use_mlx:
         result = mlx_whisper.transcribe(
