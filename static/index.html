@@ -1530,9 +1530,25 @@
     let hfActive = false;
     let hfCooldownUntil = 0;
     let followUpUntil = 0;
+    let followUpResetTimer = null;
     let kwsEnabled = false;
     let kwsWs = null;
     let kwsWokeAtMs = 0;
+
+    function openFollowUp(label, durationMs = 10000) {
+      if (!prefs.handsfree || !hfActive) return;
+      followUpUntil = Date.now() + durationMs;
+      if (followUpResetTimer) clearTimeout(followUpResetTimer);
+      if (callState === "listening" || callState === "idle") {
+        metaText.textContent = label;
+      }
+      followUpResetTimer = setTimeout(() => {
+        followUpResetTimer = null;
+        if (prefs.handsfree && hfActive && callState === "listening" && Date.now() > followUpUntil) {
+          metaText.textContent = "ハンズフリー待機中";
+        }
+      }, durationMs + 80);
+    }
 
     function isReadyState() {
       return callState === "idle" || callState === "listening";
@@ -2203,9 +2219,8 @@
           } else if (ev.type === "woke") {
             playChime("start");
             triggerPortraitMotion("anim-nod");
-            followUpUntil = Date.now() + 12000;
             setCallState("idle");
-            metaText.textContent = "どうぞお話しください";
+            openFollowUp("どうぞお話しください", 12000);
             return;
           } else if (ev.type === "ignored") {
             if (callState !== "listening") setCallState("idle");
@@ -2236,9 +2251,6 @@
             playChain = playChain.then(() => callState === "speaking" ? playWavBytes(audioBytes, ev.text, false, ev.expr || null, ev.lipsync || null) : undefined);
           } else if (ev.type === "done" && ev.timings) {
             if (replyAcc) addHistory("ai", replyAcc);
-            if (prefs.handsfree && hfActive) {
-              followUpUntil = Date.now() + 12000;
-            }
             metaText.textContent = `応答 ${ev.timings.first_audio}s`;
           }
         }
@@ -2246,6 +2258,9 @@
 
       await playChain;
       setCallState("idle");
+      if (prefs.handsfree && hfActive) {
+        openFollowUp("続けて話せます", 10000);
+      }
     }
 
     let wakeCheckBusy = false;
@@ -2364,9 +2379,8 @@
             if (!hfActive || callState !== "listening" || alarmActive || now < hfCooldownUntil || now <= followUpUntil) return;
             playChime("start");
             triggerPortraitMotion("anim-nod");
-            followUpUntil = now + 12000;
             kwsWokeAtMs = now;
-            metaText.textContent = "どうぞお話しください";
+            openFollowUp("どうぞお話しください", 12000);
           }
         } catch (_) {}
       };
@@ -2504,6 +2518,7 @@
       prefs.handsfree = false;
       hfActive = false;
       followUpUntil = 0;
+      if (followUpResetTimer) { clearTimeout(followUpResetTimer); followUpResetTimer = null; }
       kwsWokeAtMs = 0;
       disconnectKwsWs();
       try { if (hfProc) { hfProc.onaudioprocess = null; hfProc.disconnect(); } } catch (_) {}
