@@ -4,10 +4,15 @@ VoxMate の主な変更点・リリース内容を記録しています。
 
 ## [0.1.3] - 2026-11-26
 
-公式 Gemini Developer API バックエンドの追加、バックエンド生成処理の整理、および音声・リップシンク周りを含むユニットテスト拡充を行ったリリースです。
+カスタムウェイクワード（`openWakeWord`）の導入、コンテキスト取得の高速化、公式 Gemini API バックエンドの追加、およびユニットテスト拡充を行ったリリースです。
 
 ### 追加・改善
 
+- **低遅延カスタムウェイクワード KWS (`models/chotto_kiite.onnx`, `tools/kws_*.py`, `server.py`, `static/index.html`)**
+  - 「ちょっと聞いて」を検知する軽量 `Conv1d` ONNX モデル（VOICEVOX 合成音声 2,000 件＋生声録音 `/kws` で学習）と `/ws/kws` 80ms 推論を追加し、約 0.2 秒でのウェイクワード起動に対応
+- **応答速度・ハンズフリー体験の改善 (`server.py`, `static/index.html`)**
+  - 日時コンテキストの事前注入、ツールパスの明示、カレンダー／Gmail のプリフェッチにより照会応答を高速化
+  - ハンズフリー待機・文字起こし・処理中のステータス表示を整理し、再生後の不要な自動フォロートリガを無効化
 - **公式 Gemini API バックエンド (`backends/gemini.py`, `backends/__init__.py`)**
   - `VOXMATE_BACKEND=gemini`（`GEMINI_API_KEY` / `GEMINI_MODEL`）による `streamGenerateContent?alt=sse` ストリーミング対応の `GeminiApiSession` を追加
   - `systemInstruction` によるキャラクター口調・表情タグ連携、マルチターン履歴保持（最大 40 メッセージ）、話者切替時・リセット時の履歴クリアに対応
