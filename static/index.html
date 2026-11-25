@@ -1063,7 +1063,7 @@
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 <span id="timerBadgeText">00:00</span>
               </span>
-              <span id="metaText" class="meta-badge">準備完了</span>
+              <span id="metaText" class="meta-badge">のんびり待機中</span>
             </div>
           </div>
 
@@ -1545,7 +1545,7 @@
       followUpResetTimer = setTimeout(() => {
         followUpResetTimer = null;
         if (prefs.handsfree && hfActive && callState === "listening" && Date.now() > followUpUntil) {
-          metaText.textContent = "ハンズフリー待機中";
+          metaText.textContent = "耳を澄ませ中";
         }
       }, durationMs + 80);
     }
@@ -1632,7 +1632,7 @@
           await playWavBytes(wavBytes, text, boost);
           if (callState === "speaking") {
             setCallState("idle");
-            metaText.textContent = "準備完了";
+            metaText.textContent = "のんびり待機中";
           }
         }
       } catch (_) {}
@@ -1767,7 +1767,7 @@
         } else {
           metaText.classList.remove("warn");
           if (isReadyState() && metaText.textContent === "VOICEVOX 未接続") {
-            metaText.textContent = "準備完了";
+            metaText.textContent = "のんびり待機中";
           }
         }
         applySyncedState(data, firstLoad);
@@ -2037,7 +2037,7 @@
       await playWavBytes(wavBytes, text);
       playingBubbleIdx = -1;
       setCallState("idle");
-      metaText.textContent = "準備完了";
+      metaText.textContent = "のんびり待機中";
       renderChatFeed(null, false);
     }
 
@@ -2220,7 +2220,7 @@
             playChime("start");
             triggerPortraitMotion("anim-nod");
             setCallState("idle");
-            openFollowUp("どうぞお話しください", 12000);
+            openFollowUp("お呼びですか？", 12000);
             return;
           } else if (ev.type === "ignored") {
             if (callState !== "listening") setCallState("idle");
@@ -2259,7 +2259,7 @@
       await playChain;
       setCallState("idle");
       if (prefs.handsfree && hfActive) {
-        openFollowUp("続けて話せます", 10000);
+        openFollowUp("まだ聞いてますよ", 10000);
       }
     }
 
@@ -2272,7 +2272,7 @@
       } else {
         setCallState("thinking");
         playChime("commit");
-        metaText.textContent = "文字起こし中...";
+        metaText.textContent = "メモとり中...";
       }
       replyAcc = "";
       lastReplyAudios = [];
@@ -2380,7 +2380,7 @@
             playChime("start");
             triggerPortraitMotion("anim-nod");
             kwsWokeAtMs = now;
-            openFollowUp("どうぞお話しください", 12000);
+            openFollowUp("お呼びですか？", 12000);
           }
         } catch (_) {}
       };
@@ -2459,7 +2459,7 @@
                 lastVoiceMs = now;
                 speechChunks = preRollChunks.splice(0, preRollChunks.length);
                 preRollSamples = 0;
-                if (now <= followUpUntil) metaText.textContent = "聞き取り中...";
+                if (now <= followUpUntil) metaText.textContent = "うんうん...";
               }
             } else {
               consecHot = 0;
@@ -2507,7 +2507,7 @@
         if (kwsEnabled) connectKwsWs();
         applyHandsfreeUi();
         setCallState("listening");
-        metaText.textContent = "ハンズフリー待機中";
+        metaText.textContent = "耳を澄ませ中";
       } catch (err) {
         stopHandsfree();
         metaText.textContent = "マイク許可が必要です";
@@ -2531,7 +2531,7 @@
       hfStream = null;
       applyHandsfreeUi();
       if (callState === "listening") setCallState("idle");
-      metaText.textContent = "準備完了";
+      metaText.textContent = "のんびり待機中";
     }
 
     async function sendTextStream(text) {
@@ -2650,7 +2650,7 @@
         discardRecording = false;
         setCallState("recording");
         triggerPortraitMotion("anim-nod");
-        metaText.textContent = "聞いています...";
+        metaText.textContent = "うんうん...";
         if (micAnalyser) startMicMeter();
       } catch (err) {
         releaseMicStream();
@@ -2663,7 +2663,7 @@
       if (callState !== "recording" || !mediaRecorder) return;
       stopMicMeter();
       setCallState("thinking");
-      metaText.textContent = "文字起こし中...";
+      metaText.textContent = "メモとり中...";
       const mr = mediaRecorder;
       mediaRecorder = null;
       if (recStopTimer) clearTimeout(recStopTimer);
