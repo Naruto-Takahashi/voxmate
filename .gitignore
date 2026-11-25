@@ -16,5 +16,6 @@ static/portraits/
 arm_ChromePublic.apk
 *.log
 chat_workspace/
+data/
 .env
 .DS_Store

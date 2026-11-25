@@ -1530,6 +1530,9 @@
     let hfActive = false;
     let hfCooldownUntil = 0;
     let followUpUntil = 0;
+    let kwsEnabled = false;
+    let kwsWs = null;
+    let kwsWokeAtMs = 0;
 
     function isReadyState() {
       return callState === "idle" || callState === "listening";
@@ -1654,6 +1657,9 @@
     }
 
     function applySyncedState(data, firstLoad = false) {
+      if (typeof data.kws_enabled === "boolean") {
+        kwsEnabled = data.kws_enabled;
+      }
       if (data.agy_model && modelSelect.options.length > 0) {
         modelSelect.value = data.agy_model;
       }
@@ -2322,6 +2328,57 @@
     let hfProc = null;
     let hfMuteGain = null;
 
+    function downsampleTo16kInt16(float32Buf, inRate) {
+      const ratio = inRate / 16000;
+      const outLen = Math.max(1, Math.floor(float32Buf.length / ratio));
+      const out = new Int16Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const s = Math.max(-1, Math.min(1, float32Buf[Math.floor(i * ratio)] || 0));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      return out;
+    }
+
+    function disconnectKwsWs() {
+      if (kwsWs) {
+        try { kwsWs.close(); } catch (_) {}
+        kwsWs = null;
+      }
+    }
+
+    function connectKwsWs() {
+      if (!kwsEnabled || !hfActive) return;
+      if (kwsWs && (kwsWs.readyState === WebSocket.OPEN || kwsWs.readyState === WebSocket.CONNECTING)) return;
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${proto}//${location.host}/ws/kws`);
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === "disabled") {
+            kwsEnabled = false;
+            disconnectKwsWs();
+            return;
+          }
+          if (msg.type === "woke") {
+            const now = Date.now();
+            if (!hfActive || callState !== "listening" || alarmActive || now < hfCooldownUntil || now <= followUpUntil) return;
+            playChime("start");
+            triggerPortraitMotion("anim-nod");
+            followUpUntil = now + 12000;
+            kwsWokeAtMs = now;
+            metaText.textContent = "どうぞお話しください";
+          }
+        } catch (_) {}
+      };
+      ws.onclose = () => {
+        if (kwsWs === ws) kwsWs = null;
+        if (hfActive && kwsEnabled) {
+          setTimeout(connectKwsWs, 1200);
+        }
+      };
+      kwsWs = ws;
+    }
+
     async function startHandsfree() {
       if (hfActive) return;
       try {
@@ -2361,6 +2418,9 @@
           }
 
           const input = ev.inputBuffer.getChannelData(0);
+          if (kwsEnabled && kwsWs && kwsWs.readyState === WebSocket.OPEN && now > followUpUntil) {
+            kwsWs.send(downsampleTo16kInt16(input, sr).buffer);
+          }
           let sum = 0;
           for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
           const rms = Math.sqrt(sum / input.length);
@@ -2405,8 +2465,20 @@
               if (totalMs < 350) {
                 return;
               }
-              const wavBlob = encodePcmWav(chunksToSend, sr, 16000);
               const needWake = now > followUpUntil;
+              if (kwsEnabled && kwsWs && kwsWs.readyState === WebSocket.OPEN) {
+                if (needWake) {
+                  // KWS が有効でウェイクワード未検知の発話は Whisper へ送らず破棄
+                  return;
+                }
+                if (kwsWokeAtMs > 0 && (lastVoiceMs - kwsWokeAtMs) < 450) {
+                  // ウェイクワード単発発話の直後なので本題を待つ
+                  kwsWokeAtMs = 0;
+                  return;
+                }
+              }
+              kwsWokeAtMs = 0;
+              const wavBlob = encodePcmWav(chunksToSend, sr, 16000);
               sendAudioStream(wavBlob, "wav", needWake);
             }
           }
@@ -2418,6 +2490,7 @@
 
         prefs.handsfree = true;
         hfActive = true;
+        if (kwsEnabled) connectKwsWs();
         applyHandsfreeUi();
         setCallState("listening");
         metaText.textContent = "ハンズフリー待機中";
@@ -2431,6 +2504,8 @@
       prefs.handsfree = false;
       hfActive = false;
       followUpUntil = 0;
+      kwsWokeAtMs = 0;
+      disconnectKwsWs();
       try { if (hfProc) { hfProc.onaudioprocess = null; hfProc.disconnect(); } } catch (_) {}
       try { if (hfSource) hfSource.disconnect(); } catch (_) {}
       try { if (hfMuteGain) hfMuteGain.disconnect(); } catch (_) {}

@@ -705,6 +705,72 @@ async def character_icon(speaker_id: int):
     )
 
 
+KWS_MODEL_PATH = os.environ.get("VOXMATE_KWS_MODEL", str(BASE_DIR / "models" / "chotto_kiite.onnx"))
+KWS_THRESHOLD = float(os.environ.get("VOXMATE_KWS_THRESHOLD", "0.72"))
+KWS_PATIENCE = int(os.environ.get("VOXMATE_KWS_PATIENCE", "2"))
+KWS_ENABLED = os.environ.get("VOXMATE_KWS_ENABLED", "1").lower() not in ("0", "false", "no")
+
+
+def _has_kws_model() -> bool:
+    if not KWS_ENABLED:
+        return False
+    p = Path(KWS_MODEL_PATH).expanduser()
+    if not p.is_file():
+        return False
+    try:
+        import openwakeword  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _create_kws_model():
+    import inspect
+    from openwakeword.model import Model as OWWModel
+
+    p = str(Path(KWS_MODEL_PATH).expanduser())
+    params = inspect.signature(OWWModel.__init__).parameters
+    if "wakeword_models" in params:
+        return OWWModel(wakeword_models=[p], inference_framework="onnx")
+    return OWWModel(wakeword_model_paths=[p])
+
+
+@app.get("/kws")
+async def kws_record_page():
+    p = STATIC_DIR / "kws_record.html"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(str(p), media_type="text/html")
+
+
+def _kws_sample_counts() -> dict[str, int]:
+    pos_dir = BASE_DIR / "data" / "kws" / "pos_user"
+    neg_dir = BASE_DIR / "data" / "kws" / "neg_user"
+    return {
+        "pos_user": len(list(pos_dir.glob("*.wav"))) if pos_dir.exists() else 0,
+        "neg_user": len(list(neg_dir.glob("*.wav"))) if neg_dir.exists() else 0,
+    }
+
+
+@app.get("/api/kws/samples")
+async def kws_samples_count():
+    return _kws_sample_counts()
+
+
+@app.post("/api/kws/sample")
+async def upload_kws_sample(audio: UploadFile = File(...), kind: str = Form("pos")):
+    if kind not in ("pos", "neg"):
+        raise HTTPException(status_code=400, detail="Invalid kind")
+    raw = await audio.read()
+    sub = "pos_user" if kind == "pos" else "neg_user"
+    out_dir = BASE_DIR / "data" / "kws" / sub
+    out_dir.mkdir(parents=True, exist_ok=True)
+    idx = len(list(out_dir.glob("*.wav")))
+    out_path = out_dir / f"{kind}_{idx:04d}.wav"
+    out_path.write_bytes(raw)
+    return _kws_sample_counts()
+
+
 @app.get("/api/state")
 async def get_state():
     now = time.time()
@@ -717,6 +783,7 @@ async def get_state():
         "alarm_dismissed_at": float(shared_state.get("alarm_dismissed_at", 0.0)),
         "timers": [_timer_public_view(t, now) for t in sorted(active_timers, key=lambda x: x["fire_at"])],
         "state_version": shared_state["state_version"],
+        "kws_enabled": _has_kws_model(),
     }
 
 
@@ -737,6 +804,7 @@ async def health():
         "agy_running": bool(agy_session.proc and agy_session.proc.returncode is None),
         "agy_model": agy_session.model,
         "whisper_model": WHISPER_MODEL,
+        "kws_enabled": _has_kws_model(),
         "speaker_id": shared_state["speaker_id"],
         "speed_scale": shared_state["speed_scale"],
         "history": shared_state["history"],
@@ -910,6 +978,7 @@ async def chat_text(req: TextChatRequest):
 
 
 COMMON_WAKE_WORDS = [
+    "ちょっと聞いて", "ちょっときいて",
     "ねえ", "ねぇ", "ねー", "ね〜", "ね、", "ね。", "ねえ、",
     "もしもし", "ヘイ", "へい", "ちょっと", "おい", "おーい", "あの",
 ]
@@ -1600,3 +1669,70 @@ async def ws_voice(websocket: WebSocket):
     finally:
         if processing_task and not processing_task.done():
             processing_task.cancel()
+
+
+@app.websocket("/ws/kws")
+async def ws_kws(websocket: WebSocket):
+    """openWakeWord による超低遅延ウェイクワード検知ストリーム (16kHz int16 PCM)。"""
+    await websocket.accept()
+    if not _has_kws_model():
+        await websocket.send_json({"type": "disabled"})
+        await websocket.close()
+        return
+
+    oww = await asyncio.to_thread(_create_kws_model)
+    FRAME_BYTES = 1280 * 2  # 80ms @ 16kHz int16
+    buf = bytearray()
+    streak = 0
+    cooldown_until = 0.0
+
+    try:
+        while True:
+            msg = await websocket.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+            if msg.get("text") is not None:
+                try:
+                    data = json.loads(msg["text"])
+                    if data.get("type") == "reset":
+                        buf.clear()
+                        streak = 0
+                        oww.reset()
+                except Exception:
+                    pass
+                continue
+            raw = msg.get("bytes")
+            if not raw:
+                continue
+            buf.extend(raw)
+            while len(buf) >= FRAME_BYTES:
+                frame = bytes(buf[:FRAME_BYTES])
+                del buf[:FRAME_BYTES]
+                pcm = np.frombuffer(frame, dtype=np.int16)
+                scores = await asyncio.to_thread(oww.predict, pcm)
+                now = time.monotonic()
+                if now < cooldown_until:
+                    streak = 0
+                    continue
+                if scores:
+                    best_label, best_score = max(scores.items(), key=lambda kv: float(kv[1]))
+                    score = float(best_score)
+                else:
+                    best_label, score = "", 0.0
+
+                if score >= KWS_THRESHOLD:
+                    streak += 1
+                else:
+                    streak = 0
+
+                if streak >= KWS_PATIENCE or score >= 0.92:
+                    print(f"[KWS] woke! label={best_label} score={score:.3f}", flush=True)
+                    await websocket.send_json(
+                        {"type": "woke", "label": best_label, "score": round(score, 3)}
+                    )
+                    oww.reset()
+                    buf.clear()
+                    streak = 0
+                    cooldown_until = now + 1.5
+    except WebSocketDisconnect:
+        pass

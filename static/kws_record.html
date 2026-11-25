@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoxMate - KWS 生声録音</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0d1219;
+      color: #f0f4f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: #151c26;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+    }
+    h1 { margin: 0 0 8px; font-size: 20px; }
+    p { margin: 0 0 18px; color: #94a3b8; font-size: 13px; line-height: 1.5; }
+    .counts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+    .stat .label { font-size: 12px; color: #94a3b8; }
+    .stat .val { font-size: 22px; font-weight: 700; margin-top: 4px; color: #93c5fd; }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: transparent;
+      color: #cbd5e1;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .status-box {
+      background: #0d1219;
+      border-radius: 14px;
+      padding: 22px 16px;
+      text-align: center;
+      margin-bottom: 16px;
+      min-height: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .big-text { font-size: 26px; font-weight: 800; }
+    .sub-text { font-size: 13px; color: #94a3b8; }
+    .status-box.rec { border: 1px solid #ef4444; box-shadow: 0 0 24px rgba(239,68,68,0.22); }
+    .status-box.rec .big-text { color: #f87171; }
+    .btns { display: flex; gap: 10px; }
+    button.primary {
+      flex: 1;
+      padding: 13px;
+      border-radius: 12px;
+      border: none;
+      background: #22c55e;
+      color: #062814;
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button.secondary {
+      padding: 13px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: #f8fafc;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .back { display: inline-block; margin-top: 16px; color: #93c5fd; font-size: 13px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ウェイクワード生声録音</h1>
+    <p>普段お使いの端末のマイクで録音します。普通・早口・小声・少し離れた位置などを混ぜると精度が上がります。</p>
+
+    <div class="counts">
+      <div class="stat">
+        <div class="label">ポジティブ (ちょっと聞いて)</div>
+        <div class="val" id="posCount">-</div>
+      </div>
+      <div class="stat">
+        <div class="label">ネガティブ (ちょっと待って等)</div>
+        <div class="val" id="negCount">-</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tabPos">「ちょっと聞いて」を録る</button>
+      <button class="tab" id="tabNeg">ネガティブを録る</button>
+    </div>
+
+    <div class="status-box" id="statusBox">
+      <div class="big-text" id="bigText">待機中</div>
+      <div class="sub-text" id="subText">「連続録音」を押すと自動で進みます</div>
+    </div>
+
+    <div class="btns">
+      <button class="primary" id="startBtn">連続録音スタート (25回)</button>
+      <button class="secondary" id="stopBtn" disabled>停止</button>
+    </div>
+
+    <a class="back" href="/">← VoxMate メイン画面へ戻る</a>
+  </div>
+
+  <script>
+    let kind = "pos";
+    let running = false;
+    let stopReq = false;
+    let stream = null;
+    let audioCtx = null;
+
+    const posCountEl = document.getElementById("posCount");
+    const negCountEl = document.getElementById("negCount");
+    const tabPos = document.getElementById("tabPos");
+    const tabNeg = document.getElementById("tabNeg");
+    const statusBox = document.getElementById("statusBox");
+    const bigText = document.getElementById("bigText");
+    const subText = document.getElementById("subText");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    function updateTabUi() {
+      tabPos.classList.toggle("active", kind === "pos");
+      tabNeg.classList.toggle("active", kind === "neg");
+      startBtn.textContent = kind === "pos" ? "連続録音スタート (25回)" : "連続録音スタート (10回)";
+    }
+
+    tabPos.onclick = () => { if (!running) { kind = "pos"; updateTabUi(); } };
+    tabNeg.onclick = () => { if (!running) { kind = "neg"; updateTabUi(); } };
+
+    async function refreshCounts() {
+      const r = await fetch("/api/kws/samples");
+      const d = await r.json();
+      posCountEl.textContent = `${d.pos_user} 件`;
+      negCountEl.textContent = `${d.neg_user} 件`;
+    }
+    refreshCounts();
+
+    function encodeWav16k(chunks, inRate) {
+      let total = 0;
+      chunks.forEach(c => total += c.length);
+      const merged = new Float32Array(total);
+      let off = 0;
+      chunks.forEach(c => { merged.set(c, off); off += c.length; });
+      const ratio = inRate / 16000;
+      const outLen = Math.max(1, Math.floor(merged.length / ratio));
+      const buf = new ArrayBuffer(44 + outLen * 2);
+      const dv = new DataView(buf);
+      const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+      writeStr(0, "RIFF"); dv.setUint32(4, 36 + outLen * 2, true);
+      writeStr(8, "WAVE"); writeStr(12, "fmt ");
+      dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+      dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true);
+      dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+      writeStr(36, "data"); dv.setUint32(40, outLen * 2, true);
+      for (let i = 0; i < outLen; i++) {
+        const s = Math.max(-1, Math.min(1, merged[Math.floor(i * ratio)] || 0));
+        dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      }
+      return new Blob([buf], { type: "audio/wav" });
+    }
+
+    function recordOnce(sec = 1.8) {
+      return new Promise((resolve) => {
+        const sr = audioCtx.sampleRate || 48000;
+        const src = audioCtx.createMediaStreamSource(stream);
+        const proc = audioCtx.createScriptProcessor(4096, 1, 1);
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0;
+        const chunks = [];
+        let collected = 0;
+        const target = Math.floor(sr * sec);
+        proc.onaudioprocess = (ev) => {
+          const d = new Float32Array(ev.inputBuffer.getChannelData(0));
+          chunks.push(d);
+          collected += d.length;
+          if (collected >= target) {
+            proc.onaudioprocess = null;
+            try { proc.disconnect(); src.disconnect(); gain.disconnect(); } catch (_) {}
+            resolve(encodeWav16k(chunks, sr));
+          }
+        };
+        src.connect(proc);
+        proc.connect(gain);
+        gain.connect(audioCtx.destination);
+      });
+    }
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    startBtn.onclick = async () => {
+      if (running) return;
+      running = true;
+      stopReq = false;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      const total = kind === "pos" ? 25 : 10;
+      const phrase = kind === "pos" ? "「ちょっと聞いて」" : "「ちょっと待って / 無音」";
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!audioCtx) audioCtx = new Ctx();
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        for (let i = 0; i < total; i++) {
+          if (stopReq) break;
+          statusBox.classList.remove("rec");
+          bigText.textContent = `[${i + 1}/${total}] 準備…`;
+          subText.textContent = `${phrase} の準備をしてください`;
+          await sleep(600);
+          if (stopReq) break;
+          statusBox.classList.add("rec");
+          bigText.textContent = `[${i + 1}/${total}] 発声！`;
+          subText.textContent = `${phrase} を今話してください`;
+          const wav = await recordOnce(1.8);
+          statusBox.classList.remove("rec");
+          const fd = new FormData();
+          fd.append("audio", wav, "sample.wav");
+          fd.append("kind", kind);
+          const res = await fetch("/api/kws/sample", { method: "POST", body: fd });
+          const d = await res.json();
+          posCountEl.textContent = `${d.pos_user} 件`;
+          negCountEl.textContent = `${d.neg_user} 件`;
+          await sleep(250);
+        }
+        bigText.textContent = stopReq ? "停止しました" : "録音完了！";
+        subText.textContent = "お疲れさまでした";
+      } catch (e) {
+        bigText.textContent = "エラー";
+        subText.textContent = String(e);
+      } finally {
+        statusBox.classList.remove("rec");
+        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+        running = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    };
+
+    stopBtn.onclick = () => { stopReq = true; };
+  </script>
+</body>
+</html>
