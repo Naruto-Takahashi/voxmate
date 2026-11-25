@@ -1,6 +1,6 @@
 [project]
 name = "voxmate"
-version = "0.1.0"
+version = "0.1.3"
 description = "Cross-device voice assistant powered by VOICEVOX, Whisper (MLX / faster-whisper), and pluggable AI backends"
 authors = [
     { name = "Naruto-Takahashi", email = "t.naruto7610@gmail.com" }

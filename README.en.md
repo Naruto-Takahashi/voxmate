@@ -50,7 +50,7 @@ Switch characters and speaking styles with a single tap from the settings panel 
   - Independent **Conversation Volume** (chat, chimes, `reminder`) and **Alarm Volume** (looping `alarm`) sliders with live preview chimes
   - Stopping an alarm on one device automatically dismisses it across all connected devices
 - **Pluggable AI Backends (`backends/`)**:
-  - Switch between `agy` (persistent Antigravity CLI session) and `claude` (Claude Code CLI) via `VOXMATE_BACKEND`
+  - Switch between `agy` (persistent Antigravity CLI session), `claude` (Claude Code CLI), or `gemini` (official Gemini Developer API via `GEMINI_API_KEY`) using `VOXMATE_BACKEND`
 - **Workspace Isolation (`VOXMATE_WORKDIR`)**:
   - Automatically loads `VOXMATE.md`, `MEMORY.md`, and `SOUL.md` from your workspace so personal data stays cleanly separated
 - **Calendar, Mail & Smart Home Templates (`examples/`)**:
@@ -60,7 +60,7 @@ Switch characters and speaking styles with a single tap from the settings panel 
 
 - **STT**: `mlx-whisper` on Apple Silicon macOS / `faster-whisper` on Linux & Windows (auto-selected via `uv sync`) + Silero VAD
 - **Fast-Path**: `fast_path.py` (clock, timers, cached SwitchBot matching)
-- **LLM Backends**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`)
+- **LLM Backends**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`) / `backends/gemini.py` (`gemini`)
 - **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio gain control & phoneme-synced lip-sync
 
 ---
@@ -104,7 +104,7 @@ uv sync
 
 ### 4. Choose AI Backend & Start
 
-Antigravity CLI (`agy`) is used by default. Set `VOXMATE_BACKEND=claude` to use Claude Code CLI instead.
+Antigravity CLI (`agy`) is used by default. Set `VOXMATE_BACKEND=claude` for Claude Code CLI, or `VOXMATE_BACKEND=gemini` (with `GEMINI_API_KEY`) for the official Gemini Developer API.
 
 ```bash
 # macOS (starts VOICEVOX Engine + VoxMate)
@@ -112,6 +112,9 @@ Antigravity CLI (`agy`) is used by default. Set `VOXMATE_BACKEND=claude` to use 
 
 # macOS with Claude Code
 VOXMATE_BACKEND=claude ./start.sh
+
+# macOS with official Gemini API
+GEMINI_API_KEY="your_api_key" VOXMATE_BACKEND=gemini ./start.sh
 
 # Linux / Windows (with VOICEVOX Engine already running)
 uv run python -m uvicorn server:app --host 127.0.0.1 --port 8000

@@ -2,6 +2,22 @@
 
 VoxMate の主な変更点・リリース内容を記録しています。
 
+## [0.1.3] - 2026-11-26
+
+公式 Gemini Developer API バックエンドの追加、バックエンド生成処理の整理、および音声・リップシンク周りを含むユニットテスト拡充を行ったリリースです。
+
+### 追加・改善
+
+- **公式 Gemini API バックエンド (`backends/gemini.py`, `backends/__init__.py`)**
+  - `VOXMATE_BACKEND=gemini`（`GEMINI_API_KEY` / `GEMINI_MODEL`）による `streamGenerateContent?alt=sse` ストリーミング対応の `GeminiApiSession` を追加
+  - `systemInstruction` によるキャラクター口調・表情タグ連携、マルチターン履歴保持（最大 40 メッセージ）、話者切替時・リセット時の履歴クリアに対応
+  - `create_backend_session()` のディスパッチをマッピング化し、拡張しやすい構成へ整理
+- **ユニットテストの拡充 (`tests/test_gemini_backend.py`, `tests/test_speech_helpers.py`)**
+  - Gemini SSE パース・テキスト抽出・ファクトリ生成・API キー未設定ガードのテストを追加
+  - `extract_expression_tag`・`clean_for_speech`・`_extract_lipsync_timeline` のユニットテストを追加
+- **ドキュメント更新 (`.env.example`, `README.md`, `README.en.md`)**
+  - `VOXMATE_BACKEND=gemini` と `GEMINI_API_KEY` / `GEMINI_MODEL` の設定手順を追記
+
 ## [0.1.2] - 2026-11-25
 
 LLM による文ごとの表情・ポーズ指定、表情バリエーションの拡充、自然な待機・傾聴仕草、および VOICEVOX 音素データ連動の精密リップシンクを実装したリリースです。

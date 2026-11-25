@@ -50,7 +50,7 @@ PC・スマホ・Echo Show 5 で画面とアラームを同期しながら、時
   - **会話音量**（普段の会話・操作音・`reminder`）と **アラーム音量**（目覚まし・`alarm`）を独立して設定可能（スライダー操作時の試し鳴らし付き）
   - アラーム発火時は画面中央に大型「停止」モーダルを表示し、1 台で止めると接続中の全端末で連動停止
 - **差し替え可能な AI バックエンド (`backends/`)**:
-  - 環境変数 `VOXMATE_BACKEND` で `agy`（Antigravity CLI 常駐セッション）または `claude`（Claude Code CLI）を選択可能
+  - 環境変数 `VOXMATE_BACKEND` で `agy`（Antigravity CLI 常駐セッション）、`claude`（Claude Code CLI）、または `gemini`（公式 Gemini Developer API / `GEMINI_API_KEY`）を選択可能
 - **ワークスペース分離 (`VOXMATE_WORKDIR`)**:
   - `VOXMATE.md`・`MEMORY.md`・`SOUL.md` を指定ワークスペースから自動読み込みするため、個人環境を別リポジトリに安全に分離可能
 - **カレンダー・メール・スマートホーム連携（拡張テンプレート同梱）**:
@@ -60,7 +60,7 @@ PC・スマホ・Echo Show 5 で画面とアラームを同期しながら、時
 
 - **STT**: macOS Apple Silicon は `mlx-whisper`、Linux / Windows は `faster-whisper` を自動選択（`uv sync` で環境に応じて自動インストール） + Silero VAD
 - **Fast-Path**: `fast_path.py`（時計・タイマー・SwitchBot キャッシュ照合）
-- **LLM バックエンド**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`)
+- **LLM バックエンド**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`) / `backends/gemini.py` (`gemini`)
 - **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio API ゲイン制御・音素同期リップシンク
 
 ---
@@ -104,7 +104,7 @@ uv sync
 
 ### 4. AI バックエンドの選択と起動
 
-デフォルトは Antigravity CLI（`agy`）です。Claude Code を使う場合は `VOXMATE_BACKEND=claude` を指定して起動します。
+デフォルトは Antigravity CLI（`agy`）です。Claude Code を使う場合は `VOXMATE_BACKEND=claude`、公式 Gemini API（`GEMINI_API_KEY`）を使う場合は `VOXMATE_BACKEND=gemini` を指定して起動します。
 
 ```bash
 # macOS（VOICEVOX Engine + VoxMate を一括起動）
@@ -112,6 +112,9 @@ uv sync
 
 # Claude Code を使う場合（macOS）
 VOXMATE_BACKEND=claude ./start.sh
+
+# 公式 Gemini API を使う場合（macOS）
+GEMINI_API_KEY="your_api_key" VOXMATE_BACKEND=gemini ./start.sh
 
 # Linux / Windows（外部で VOICEVOX Engine を起動済みの状態でサーバーを起動）
 uv run python -m uvicorn server:app --host 127.0.0.1 --port 8000
