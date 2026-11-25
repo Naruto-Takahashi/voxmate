@@ -1545,7 +1545,7 @@
       followUpResetTimer = setTimeout(() => {
         followUpResetTimer = null;
         if (prefs.handsfree && hfActive && callState === "listening" && Date.now() > followUpUntil) {
-          metaText.textContent = "耳を澄ませ中";
+          metaText.textContent = "のんびり待機中";
         }
       }, durationMs + 80);
     }
@@ -2261,7 +2261,7 @@
       if (prefs.handsfree && hfActive) {
         followUpUntil = 0;
         if (followUpResetTimer) { clearTimeout(followUpResetTimer); followUpResetTimer = null; }
-        metaText.textContent = "耳を澄ませ中";
+        metaText.textContent = "のんびり待機中";
       }
     }
 
@@ -2509,7 +2509,7 @@
         if (kwsEnabled) connectKwsWs();
         applyHandsfreeUi();
         setCallState("listening");
-        metaText.textContent = "耳を澄ませ中";
+        metaText.textContent = "のんびり待機中";
       } catch (err) {
         stopHandsfree();
         metaText.textContent = "マイク許可が必要です";
