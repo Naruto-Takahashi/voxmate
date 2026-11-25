@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -12,11 +13,14 @@ def build_amivoice_d_param(
     engine: str = DEFAULT_AMIVOICE_ENGINE,
     profile_words: str = "",
 ) -> str:
-    """AmiVoice 同期 HTTP API 用の d パラメータを組み立てる。"""
+    """AmiVoice 同期 HTTP API 用の d パラメータを組み立てる。
+
+    profile_words は公式仕様に合わせて「表記 読み|表記 読み」形式を URL エンコードして渡す。
+    """
     parts = [f"grammarFileNames={engine.strip() or DEFAULT_AMIVOICE_ENGINE}"]
     words = profile_words.strip()
     if words:
-        parts.append(f"profileWords={words}")
+        parts.append(f"profileWords={quote(words, safe='')}")
     return " ".join(parts)
 
 

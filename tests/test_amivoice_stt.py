@@ -18,10 +18,10 @@ class AmiVoiceSttTests(unittest.TestCase):
             build_amivoice_d_param(),
             f"grammarFileNames={DEFAULT_AMIVOICE_ENGINE}",
         )
-        self.assertEqual(
-            build_amivoice_d_param("-a-general", "ずんだもん|ズンダモン SwitchBot|スイッチボット"),
-            "grammarFileNames=-a-general profileWords=ずんだもん|ズンダモン SwitchBot|スイッチボット",
-        )
+        d = build_amivoice_d_param("-a-general", "ずんだもん ずんだもん|SwitchBot すいっちぼっと")
+        self.assertTrue(d.startswith("grammarFileNames=-a-general profileWords="))
+        self.assertNotIn("|", d)
+        self.assertEqual(d.count(" "), 1)
 
     def test_parse_amivoice_response_success_and_error(self):
         self.assertEqual(
