@@ -2272,7 +2272,7 @@
       } else {
         setCallState("thinking");
         playChime("commit");
-        metaText.textContent = "音声処理中...";
+        metaText.textContent = "文字起こし中...";
       }
       replyAcc = "";
       lastReplyAudios = [];
@@ -2663,7 +2663,7 @@
       if (callState !== "recording" || !mediaRecorder) return;
       stopMicMeter();
       setCallState("thinking");
-      metaText.textContent = "音声処理中...";
+      metaText.textContent = "文字起こし中...";
       const mr = mediaRecorder;
       mediaRecorder = null;
       if (recStopTimer) clearTimeout(recStopTimer);
