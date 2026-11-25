@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -122,8 +123,9 @@ def build_preamble(speaker_id: int) -> str:
         except Exception:
             pass
 
+    now_str = datetime.now().strftime("%Y-%m-%d (%a) %H:%M")
     return (
-        f"【音声会話モード】あなたは「{persona}」として振る舞ってください。"
+        f"【音声会話モード】現在日時: {now_str}。あなたは「{persona}」として振る舞ってください。"
         "ユーザーをシステム上のユーザーIDやアカウント名で呼ばず、キャラクターの性格に合わせて「マスター」や「ご主人様」などと呼んでください。"
         "音声で読み上げるため、キャラクターの口調を保ったまま1〜3文程度の簡潔で自然な日本語で答えてください。"
         "Markdown記号（*や#や`）や箇条書き記号、URLは使わないでください。"
@@ -954,6 +956,88 @@ def is_wake_only(text: str, speaker_id: int) -> bool:
     return len(rem) <= 2
 
 
+def _resolve_orca_bin() -> Optional[str]:
+    found = shutil.which("orca")
+    if found:
+        return found
+    for cand in (
+        os.path.expanduser("~/.local/bin/orca"),
+        "/Applications/Orca.app/Contents/Resources/bin/orca",
+    ):
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+async def _run_quick_cmd(cmd: list[str], timeout: float = 4.5) -> str:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=str(CHAT_WORKDIR),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        if proc.returncode == 0:
+            return out.decode("utf-8", errors="replace").strip()
+    except Exception:
+        pass
+    return ""
+
+
+async def _prefetch_context(user_text: str) -> tuple[str, Optional[str]]:
+    orca_bin = _resolve_orca_bin()
+    if not orca_bin:
+        return "", None
+
+    want_cal = bool(re.search(r"(予定|スケジュール|カレンダー|会議|ミーティング|mtg|空い|あいて)", user_text, re.I))
+    want_mail = bool(re.search(r"(メール|受信|gmail|届い|未読)", user_text, re.I))
+    if not want_cal and not want_mail:
+        return "", None
+
+    tasks: list[tuple[str, asyncio.Task[str]]] = []
+    if want_cal:
+        today = datetime.now().date()
+        days = 14 if re.search(r"(来週|今月|2週間)", user_text) else 7
+        end_day = today + timedelta(days=days)
+        tasks.append(
+            (
+                "カレンダー",
+                asyncio.create_task(
+                    _run_quick_cmd(
+                        [
+                            orca_bin,
+                            "calendar",
+                            "list",
+                            "--from",
+                            today.isoformat(),
+                            "--to",
+                            end_day.isoformat(),
+                        ]
+                    )
+                ),
+            )
+        )
+    if want_mail:
+        q = "is:unread" if "未読" in user_text else "in:inbox"
+        tasks.append(
+            (
+                "メール",
+                asyncio.create_task(
+                    _run_quick_cmd([orca_bin, "gmail", "search", q])
+                ),
+            )
+        )
+
+    label = "予定とメールを確認中..." if (want_cal and want_mail) else ("予定を確認中..." if want_cal else "メールを確認中...")
+    results = await asyncio.gather(*(t for _, t in tasks), return_exceptions=True)
+    sections: list[str] = []
+    for (name, _), res in zip(tasks, results):
+        if isinstance(res, str) and res:
+            sections.append(f"[{name}]\n{res[:1500]}")
+    return "\n\n".join(sections), label
+
+
 async def _stream_reply_events(
     user_text: str,
     speaker_id: int,
@@ -1041,8 +1125,21 @@ async def _stream_reply_events(
                 ev_out["expr"] = last_silent_expr
             yield (json.dumps(ev_out, ensure_ascii=False) + "\n").encode("utf-8")
     else:
+        prefetched, prefetch_label = await _prefetch_context(user_text)
+        if prefetch_label:
+            yield (
+                json.dumps(
+                    {"type": "progress", "label": prefetch_label}, ensure_ascii=False
+                )
+                + "\n"
+            ).encode("utf-8")
+        llm_text = (
+            f"{user_text}\n\n[事前取得データ（コマンドを再実行せずこの内容を元に簡潔に答えてください）]\n{prefetched}"
+            if prefetched
+            else user_text
+        )
         async for ev in agy_session.ask_events(
-            user_text, speaker_id=speaker_id, reset=reset
+            llm_text, speaker_id=speaker_id, reset=reset
         ):
             if ev["type"] == "progress":
                 yield (

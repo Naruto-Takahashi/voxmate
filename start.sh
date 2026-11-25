@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH="/opt/homebrew/bin:/etc/profiles/per-user/${USER:-$(whoami)}/bin:/nix/var/nix/profiles/default/bin:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="/opt/homebrew/bin:/etc/profiles/per-user/${USER:-$(whoami)}/bin:/nix/var/nix/profiles/default/bin:${HOME}/.local/bin:/Applications/Orca.app/Contents/Resources/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
