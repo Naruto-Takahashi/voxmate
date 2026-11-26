@@ -2,6 +2,19 @@
 
 VoxMate の主な変更点・リリース内容を記録しています。
 
+## [0.1.4] - 2026-11-26
+
+AmiVoice API による音声認識バックエンド（`VOXMATE_STT=amivoice`）と開発・リリース規約（`CONTRIBUTING.md`）を追加したリリースです。
+
+### 追加・改善
+
+- **AmiVoice API 音声認識対応 (`stt_amivoice.py`, `server.py`, `.env.example`)**
+  - 同期 HTTP インタフェース（`https://acp-api.amivoice.com/v1/nolog/recognize`）に対応した `transcribe_wav_amivoice()` を実装
+  - `AMIVOICE_PROFILE_WORDS`（`表記 読み|表記 読み` 形式の URL エンコード）によるドメイン語彙・固有名詞登録に対応
+  - ユニットテスト（`tests/test_amivoice_stt.py`）を追加
+- **開発・リリースガイドライン (`CONTRIBUTING.md`, `README.md`, `README.en.md`)**
+  - テスト実行、コミット規約、`pyproject.toml` / `CHANGELOG.md` / タグリリース手順をまとめた `CONTRIBUTING.md` を追加
+
 ## [0.1.3] - 2026-11-26
 
 カスタムウェイクワード（`openWakeWord`）の導入、コンテキスト取得の高速化、公式 Gemini API バックエンドの追加、およびユニットテスト拡充を行ったリリースです。

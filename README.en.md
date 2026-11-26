@@ -58,7 +58,7 @@ Switch characters and speaking styles with a single tap from the settings panel 
 
 ## Architecture
 
-- **STT**: `mlx-whisper` on Apple Silicon macOS / `faster-whisper` on Linux & Windows (auto-selected via `uv sync`) + Silero VAD
+- **STT**: `mlx-whisper` on Apple Silicon macOS / `faster-whisper` on Linux & Windows (auto-selected via `uv sync`) + Silero VAD, or `VOXMATE_STT=amivoice` (`stt_amivoice.py`) for AmiVoice API
 - **Fast-Path**: `fast_path.py` (clock, timers, cached SwitchBot matching)
 - **LLM Backends**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`) / `backends/gemini.py` (`gemini`)
 - **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio gain control & phoneme-synced lip-sync

@@ -58,7 +58,7 @@ PC・スマホ・Echo Show 5 で画面とアラームを同期しながら、時
 
 ## 構成
 
-- **STT**: macOS Apple Silicon は `mlx-whisper`、Linux / Windows は `faster-whisper` を自動選択（`uv sync` で環境に応じて自動インストール） + Silero VAD
+- **STT**: macOS Apple Silicon は `mlx-whisper`、Linux / Windows は `faster-whisper` を自動選択（`uv sync` で環境に応じて自動インストール） + Silero VAD。`VOXMATE_STT=amivoice` で AmiVoice API（`stt_amivoice.py`）へ切替可能
 - **Fast-Path**: `fast_path.py`（時計・タイマー・SwitchBot キャッシュ照合）
 - **LLM バックエンド**: `backends/agy.py` (`agy`) / `backends/claude.py` (`claude`) / `backends/gemini.py` (`gemini`)
 - **TTS**: VOICEVOX Engine (`http://127.0.0.1:50021`) + Web Audio API ゲイン制御・音素同期リップシンク
