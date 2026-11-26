@@ -25,8 +25,10 @@ uv run python -m unittest discover -s tests -v
 2. `CHANGELOG.md` の先頭に `## [X.Y.Z] - YYYY-MM-DD` セクションを追記し、主な変更点を記載する。
 3. 上記の変更とテスト通過を確認してコミットする。
 4. 注釈付きタグを作成して `main` とタグをプッシュする。
+5. GitHub Release を作成する（`CHANGELOG.md` の該当セクションをリリースノートとして添付）。
 
 ```bash
 git tag -a vX.Y.Z -m "Release vX.Y.Z: <概要>"
 git push origin main --tags
+gh release create vX.Y.Z --title "VoxMate vX.Y.Z" --notes "<CHANGELOG該当内容>"
 ```
